@@ -1,7 +1,57 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 ## 프로젝트
-DART 재무제표 수집 파이프라인. `data/output/`에 재무비율 CSV, `data/raw/`에 원본 JSON 저장 후 S3 업로드.
+
+DART 재무제표 수집 파이프라인. 한국 주식시장 기업의 재무제표를 DART API로 수집하여 `data/output/`에 재무비율 CSV, `data/raw/`에 원본 JSON을 저장하고 S3에 업로드한다.
+
+## 개발 환경
+
+```bash
+pip install -r requirements.txt
+```
+
+필수 환경변수 (`.env` 파일):
+- `DART_API_KEY`, `S3_ACCESS_KEY`, `S3_PRIVATE_KEY`, `S3_BUCKET_NAME`, `S3_REGION` (기본: ap-northeast-2)
+
+## 주요 명령어
+
+```bash
+# S3 데이터 조회
+python -m s3.cli by-status          # 정상/상폐별 건수
+python -m s3.cli by-sector          # GICS 섹터별 건수
+python -m s3.cli by-year            # 연도별 건수
+python -m s3.cli by-ticker          # 기업코드별 건수
+python -m s3.cli sectors            # 섹터 목록
+
+# PR 분석 파이프라인
+python3 scripts/pr_pipeline.py --output-json prs/context.json
+python3 scripts/pr_pipeline.py --dry-run     # 점검만 실행
+```
+
+S3 CLI 공통 필터: `--status healthy|delisted`, `--sector`, `--ticker`, `--year`, `--quarter`, `--json`
+
+## 아키텍처
+
+### S3 모듈 (`s3/`)
+- `cli.py`: argparse 기반 CLI 진입점. 서브커맨드별 쿼리 실행
+- `query.py`: S3 오브젝트 목록 조회 및 필터링 (상태, 섹터, 종목, 연도, 분기)
+- `uploader.py`: S3 업로드 (KST 타임존 처리)
+
+S3 키 규칙: `{healthy|delisted}/{gics_sector}/{ticker}_{year}_{quarter}.json`
+
+### PR 파이프라인 (`scripts/pr_pipeline.py`)
+3단계 파이프라인: git diff 파싱 → PR 타입 분류(data/structure/both) → 검증 및 마크다운 생성
+
+핵심 데이터 구조:
+- `DiffEntry`: git diff 변경 항목 (status, path, old_path)
+- `CheckItem`: 검증 결과 (name, status=PASS/WARN/FAIL, summary, details)
+
+### 데이터 구조
+- `data/input/companies_*.csv`: 수집 대상 기업 목록 (stock_code, corp_name, gics_sector, start_year, end_year, label)
+- `data/output/{종목코드}_{연도}.csv`: 재무비율 CSV (파일명 패턴: `XXXXXX_YYYY.csv`)
+- `data/raw/`: DART API 원본 JSON
 
 ## PR 분석 워크플로우
 
