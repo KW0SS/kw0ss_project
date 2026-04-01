@@ -4,10 +4,12 @@ import argparse
 import json
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Iterable
 
-from .s3_uploader import _get_s3_client, _get_s3_config
+try:
+    from .uploader import _get_s3_client, _get_s3_config
+except ImportError:
+    from uploader import _get_s3_client, _get_s3_config
 
 KEY_PATTERN = re.compile(
     r"^(?P<status>healthy|delisted)/"
