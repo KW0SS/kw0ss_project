@@ -14,5 +14,4 @@ data/input/pipeline_companies.csv
 data/input/companies_missing.csv
 data/input/companies_missing_legacy.csv
 logs/
-automation/reports/
 prs/context.json
