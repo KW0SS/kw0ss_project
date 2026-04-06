@@ -31,13 +31,18 @@ ACCOUNT_PATTERNS: list[tuple[str, str | None, str]] = [
     ("current_liabilities",   "BS", r"유동\s*부채$"),
     ("short_term_borrowings", "BS", r"단기\s*차입금"),
     ("long_term_borrowings",  "BS", r"장기\s*차입금"),
-    # [수정 v2] ^사채$ → 사채$ : "유동성사채", "전환사채" 등 변형 대응
-    ("bonds_payable",         "BS", r"사채$"),
+    # [수정 v3] 총계 우선 / 변형 계정 fallback 으로 분리
+    # matched_keys 구조상 첫 매칭에서 잠기므로, 총계 패턴을 위에 두어
+    # 총계("사채")가 있으면 총계를 사용하고, 없을 때만 변형 계정(유동성사채 등)을 fallback으로 사용
+    ("bonds_payable",         "BS", r"^사채$"),          # 1순위: 총계
+    ("bonds_payable",         "BS", r"사채$"),            # 2순위: 유동성사채, 전환사채 등 fallback
     ("total_equity",          "BS", r"자본\s*총계"),
     ("paid_in_capital",       "BS", r"^자본금$|납입\s*자본"),
     ("retained_earnings",     "BS", r"이익\s*잉여금"),
-    # [수정 v2] 주식발행초과금 추가 : 자본잉여금 총계가 없고 하위 항목만 있는 기업 대응
-    ("capital_surplus",       "BS", r"자본\s*잉여금|주식\s*발행\s*초과금"),
+    # [수정 v3] 총계 우선 / 하위항목 fallback 으로 분리
+    # 자본잉여금 총계가 있으면 총계를 사용하고, 없을 때만 주식발행초과금을 fallback으로 사용
+    ("capital_surplus",       "BS", r"^자본\s*잉여금$"),          # 1순위: 총계
+    ("capital_surplus",       "BS", r"주식\s*발행\s*초과금"),      # 2순위: fallback
 
     # ─── IS ───────────────────────────────────────────────────
     ("revenue",               "IS", r"^매출액$|^매출$|^수익\s*\(매출액\)$|^영업\s*수익$|^수익$"),
@@ -120,4 +125,3 @@ def extract_standard_items(
                 break
 
     return result
-    

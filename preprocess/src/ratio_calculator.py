@@ -158,12 +158,13 @@ def 당좌비율(items: Items) -> float | None:
 
 def 비유동자산장기적합률(items: Items) -> float | None:
     """비유동자산 / (자기자본 + 장기차입금) * 100.
-    [수정 v2] 기존 코드는 분모가 장기차입금만이어서 차입이 없는 기업은 항상 None이었음.
-    올바른 공식은 장기 안정자본(자기자본 + 장기차입금) 대비 비유동자산 비율."""
+    [수정 v3] total_equity 누락 → None 반환 (결측을 0으로 취급하지 않음)
+             long_term_borrowings 누락 → 0 fallback (차입 없는 기업 허용)"""
     nca = _get(items, "non_current_assets")
-    eq  = _get(items, "total_equity") or 0
+    eq  = _get(items, "total_equity")
     ltb = _get(items, "long_term_borrowings") or 0
-    if nca is None:
+
+    if nca is None or eq is None:
         return None
     denom = eq + ltb
     if denom == 0:
