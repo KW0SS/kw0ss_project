@@ -51,6 +51,7 @@ MACRO_PATH = DATA_DIR / "macro/macro_quarterly.csv"
 RAW_CSV    = OUTPUT_DIR / "financial_raw.csv"
 MACRO_CSV  = OUTPUT_DIR / "financial_with_macro.csv"
 CLEAN_CSV  = OUTPUT_DIR / "clean_data.csv"
+CLEAN_NO_MACRO_CSV = OUTPUT_DIR / "clean_data_no_macro.csv"
 
 sys.path.insert(0, str(ROOT / "src"))
 from account_mapper import extract_standard_items
@@ -451,19 +452,22 @@ def main():
         df = pd.read_csv(RAW_CSV, dtype={"stock_code": str, "label": str})
 
     # 2) macro 병합
-    df = merge_macro(df, macro_path=MACRO_PATH, output_path=MACRO_CSV)
+    df_with_macro = merge_macro(df, macro_path=MACRO_PATH, output_path=MACRO_CSV)
 
     # 3) 메타데이터 저장
-    unmatched_macro = int(df[MACRO_COLS].isna().all(axis=1).sum())
+    unmatched_macro = int(df_with_macro[MACRO_COLS].isna().all(axis=1).sum())
     _save_conversion_meta(
-        df=df,
+        df=df_with_macro,
         skipped=skipped,
         unmatched_macro=unmatched_macro,
-        output_path=DATA_DIR / "meta" / "conversion_meta.json",
+        output_path=META_DIR / "conversion_meta.json",
     )
 
-    # 4) 정제
-    clean(df, output_path=CLEAN_CSV)
+    # 4-1) macro 포함 정제
+    clean(df_with_macro, output_path=CLEAN_CSV)
+
+    #4-2) macro 미포함 정제 (재무비율만)
+    clean(df, output_path=CLEAN_NO_MACRO_CSV)
 
 if __name__ == "__main__":
     main()

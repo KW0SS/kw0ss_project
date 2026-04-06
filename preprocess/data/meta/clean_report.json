@@ -1,10 +1,10 @@
 {
-  "cleaned_at": "2026-04-06 15:54:24",
+  "cleaned_at": "2026-04-06 18:34:45",
   "rows_before": 29797,
   "rows_after": 29790,
   "rows_dropped": 7,
   "cols_before": 29797,
-  "cols_after": 35,
+  "cols_after": 29,
   "dropped_cols": [
     "매출액증가율",
     "순이익증가율",
