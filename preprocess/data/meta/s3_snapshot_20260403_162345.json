@@ -1,0 +1,57 @@
+{
+  "snapshot_at": "2026-04-03T16:23:45.760310+09:00",
+  "bucket": "kw0ss-raw-data-s3",
+  "total_files": 29797,
+  "by_status": {
+    "delisted": 1793,
+    "healthy": 28004
+  },
+  "by_sector": {
+    "delisted/Communication Services": 118,
+    "delisted/Consumer Discretionary": 154,
+    "delisted/Consumer Staples": 61,
+    "delisted/Financials": 9,
+    "delisted/Health Care": 250,
+    "delisted/Industrials": 561,
+    "delisted/Information Technology": 295,
+    "delisted/Materials": 341,
+    "delisted/Real Estate": 4,
+    "healthy/Communication Services": 2684,
+    "healthy/Consumer Discretionary": 2812,
+    "healthy/Consumer Staples": 28,
+    "healthy/Financials": 66,
+    "healthy/Industrials": 1,
+    "healthy/Information Technology": 15742,
+    "healthy/Materials": 6655,
+    "healthy/Real Estate": 12,
+    "healthy/Utilities": 4
+  },
+  "by_year": {
+    "2000": 2,
+    "2002": 1,
+    "2008": 5,
+    "2009": 6,
+    "2010": 6,
+    "2011": 9,
+    "2012": 11,
+    "2013": 12,
+    "2014": 11,
+    "2015": 559,
+    "2016": 2270,
+    "2017": 2411,
+    "2018": 2523,
+    "2019": 2671,
+    "2020": 2824,
+    "2021": 2994,
+    "2022": 3143,
+    "2023": 3298,
+    "2024": 3479,
+    "2025": 3562
+  },
+  "by_quarter": {
+    "ANNUAL": 8039,
+    "H1": 7162,
+    "Q1": 7318,
+    "Q3": 7278
+  }
+}
