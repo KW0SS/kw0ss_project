@@ -17,9 +17,14 @@ import seaborn as sns
 # 2-1. 데이터 로드 및 컬럼 분류
 # ---------------------------------------------------------------------------
 
-META_COLUMNS = {"stock_code", "corp_name", "year", "quarter", "label"}
+META_COLUMNS = {"stock_code", "corp_name", "year", "quarter", "label", "gics_sector"}
 
-RAW_VALUE_COLUMNS = {"유형자산", "무형자산", "무형자산상각비", "유형자산상각비", "감가상각비"}
+RAW_VALUE_COLUMNS = {"유형자산", "무형자산"}
+
+MACRO_COLUMNS = {
+    "credit_spread", "kosdaq_return", "gdp_growth_yoy",
+    "usdkrw_chg", "vix_avg", "cpi_yoy",
+}
 
 _META_DTYPES = {
     "stock_code": str,
@@ -27,6 +32,7 @@ _META_DTYPES = {
     "year": int,
     "quarter": str,
     "label": int,
+    "gics_sector": str,
 }
 
 
@@ -57,18 +63,17 @@ def load_csv(path: str | Path) -> pd.DataFrame:
 
 
 def classify_columns(df: pd.DataFrame) -> dict[str, list[str]]:
-    """DataFrame 컬럼을 meta / ratio / raw_value로 분류한다.
+    """DataFrame 컬럼을 meta / ratio / raw_value / macro로 분류한다.
 
     Returns:
-        {"meta": [...], "ratio": [...], "raw_value": [...]}
+        {"meta": [...], "ratio": [...], "raw_value": [...], "macro": [...]}
     """
     meta = [c for c in df.columns if c in META_COLUMNS]
     raw_value = [c for c in df.columns if c in RAW_VALUE_COLUMNS]
-    ratio = [
-        c for c in df.columns
-        if c not in META_COLUMNS and c not in RAW_VALUE_COLUMNS
-    ]
-    return {"meta": meta, "ratio": ratio, "raw_value": raw_value}
+    macro = [c for c in df.columns if c in MACRO_COLUMNS]
+    non_ratio = META_COLUMNS | RAW_VALUE_COLUMNS | MACRO_COLUMNS
+    ratio = [c for c in df.columns if c not in non_ratio]
+    return {"meta": meta, "ratio": ratio, "raw_value": raw_value, "macro": macro}
 
 
 def summarize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
