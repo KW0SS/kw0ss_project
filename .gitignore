@@ -13,5 +13,8 @@ data/input/companies_collected.csv
 data/input/pipeline_companies.csv
 data/input/companies_missing.csv
 data/input/companies_missing_legacy.csv
+preprocess/data/raw
+preprocess/data/extra
+preprocess/data/excluded_structural
 logs/
 prs/context.json
