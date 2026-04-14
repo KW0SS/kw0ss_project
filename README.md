@@ -16,17 +16,20 @@ DART API
                   │
                   ▼
 ┌─────────────────────────────────────────────────────┐
-│  2. 전처리 (Preprocessing)          preprocess/src/  │
+│  2. 전처리 (Preprocessing)              preprocess/  │
 │                                                      │
 │  account_mapper.py   계정과목명 → 표준 키 매핑        │
-│         │                                            │
-│         ▼                                            │
-│  ratio_calculator.py 표준 키 → 30개 재무비율 계산     │
-│         │                                            │
-│         ▼                                            │
-│  etl.py              JSON → CSV 변환 + CLI           │
+│  ratio_calculator.py 표준 키 → 재무비율 계산          │
+│  etl.py              JSON → 기업별 CSV 변환 + CLI     │
+│  step1_build_combined.py                             │
+│    raw JSON 전체 → combined_raw.csv 생성             │
+│  step2_label_and_preprocess.py                       │
+│    rolling label + split + 결측/이상치 처리          │
 │                                                      │
-│  출력: data/output/{sector}/{ticker}_{year}.csv      │
+│  출력:                                               │
+│    data/output/{sector}/{ticker}_{year}.csv          │
+│    preprocess/data/processed/combined_raw.csv        │
+│    preprocess/data/processed/H*/train|valid|test.csv │
 └─────────────────┬───────────────────────────────────┘
                   │
                   ▼
@@ -61,10 +64,16 @@ DART API
 ## 프로젝트 구조
 
 ```
-├── preprocess/src/          # 전처리 파이프라인 (핵심)
-│   ├── account_mapper.py    #   DART 계정과목명 → 표준 키 매핑
-│   ├── ratio_calculator.py  #   30개 재무비율 계산 로직
-│   └── etl.py               #   raw JSON → CSV 변환 + CLI
+├── preprocess/              # 전처리 및 학습용 데이터셋 생성
+│   ├── step1_build_combined.py
+│   │                       #   raw JSON 전체 → combined_raw.csv
+│   ├── step2_label_and_preprocess.py
+│   │                       #   H별 라벨링 + split + 결측/이상치 처리
+│   ├── preprocessor.py     #   clean_data 생성용 정제 파이프라인
+│   └── src/
+│       ├── account_mapper.py
+│       ├── ratio_calculator.py
+│       └── etl.py          #   raw JSON → CSV 변환 + CLI
 │
 ├── s3/                      # S3 업로드 & 조회
 │   ├── cli.py               #   CLI 진입점 (by-status, by-sector, ...)
@@ -119,6 +128,20 @@ python -m preprocess.src.etl batch \
     --output-base data/output/sample \
     --company-csv data/input/companies.csv
 ```
+
+### 학습용 데이터셋 생성
+
+```bash
+# Step 1: raw JSON 전체를 재무비율 행으로 병합
+python preprocess/step1_build_combined.py
+
+# Step 2: rolling label 생성 후 H별 train/valid/test 저장
+python preprocess/step2_label_and_preprocess.py
+```
+
+- Step 1 출력: `preprocess/data/processed/combined_raw.csv`
+- Step 2 출력: `preprocess/data/processed/H6`, `H8`, ..., `H24`
+- 각 H 디렉터리에는 `train.csv`, `valid.csv`, `test.csv`, `meta.json`이 저장된다.
 
 ### S3 데이터 조회
 
