@@ -24,7 +24,7 @@ from sklearn.metrics import (
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeClassifier
 
-from src.analysis.utils import classify_columns, load_csv
+from eda.utils import classify_columns, load_csv
 
 
 # ---------------------------------------------------------------------------

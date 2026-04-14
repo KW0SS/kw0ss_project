@@ -20,9 +20,9 @@ Phase 3, 4에서 필요한 패키지 3개를 추가했다.
 
 ## Phase 3: EDA 템플릿 노트북
 
-**산출물**: `notebooks/eda_template.ipynb`
+**산출물**: `eda/eda_template.ipynb`
 
-`src/analysis/utils.py`의 함수들을 import하여 `clean_data`를 즉시 분석할 수 있는 8개 섹션 구성의 노트북을 작성했다.
+`eda/utils.py`의 함수들을 import하여 `clean_data`를 즉시 분석할 수 있는 8개 섹션 구성의 노트북을 작성했다.
 
 ### 노트북 섹션 구성
 
@@ -118,6 +118,6 @@ python -m src.baseline.run_baseline --data preprocess/data/output/clean_data.csv
 | 파일 | 작업 |
 |---|---|
 | `requirements.txt` | scikit-learn, matplotlib, seaborn 추가 |
-| `notebooks/eda_template.ipynb` | 신규 생성 (Phase 3) |
+| `eda/eda_template.ipynb` | 신규 생성 (Phase 3) |
 | `src/baseline/__init__.py` | 신규 생성 |
 | `src/baseline/run_baseline.py` | 신규 생성 (Phase 4) |

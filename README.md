@@ -40,10 +40,11 @@ DART API
                   │
                   ▼
 ┌─────────────────────────────────────────────────────┐
-│  4. 분석 (Analysis)                  src/analysis/   │
+│  4. 분석 (Analysis)                         eda/      │
 │                                                      │
 │  utils.py      데이터 로드, 결측 분석, 시각화,       │
 │                상관관계, 이상치 탐지 유틸리티          │
+│  eda_template.ipynb  EDA 실행 노트북                 │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -70,8 +71,10 @@ DART API
 │   ├── query.py             #   S3 오브젝트 필터링 조회
 │   └── uploader.py          #   S3 업로드 (KST 타임존)
 │
-├── src/analysis/            # 분석 유틸리티
-│   └── utils.py             #   데이터 로드, 결측/이상치 분석, 시각화
+├── eda/                     # EDA 유틸리티 및 노트북
+│   ├── utils.py             #   데이터 로드, 결측/이상치 분석, 시각화
+│   ├── eda_template.ipynb   #   EDA 템플릿 노트북
+│   └── eda_template.executed.html
 │
 ├── scripts/                 # 자동화 스크립트
 │   └── pr_pipeline.py       #   PR 분석 파이프라인

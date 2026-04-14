@@ -79,7 +79,7 @@ aws s3 cp s3://kw0ss-raw-data-s3/healthy/{sector}/{ticker}_{year}_{quarter}.json
 
 ---
 
-## Phase 2: 재사용 분석 함수 작성 (`src/analysis/utils.py`)
+## Phase 2: 재사용 분석 함수 작성 (`eda/utils.py`)
 
 ### 목표
 EDA 노트북과 이후 분석에서 반복 사용할 함수들을 모듈로 분리
@@ -89,12 +89,13 @@ EDA 노트북과 이후 분석에서 반복 사용할 함수들을 모듈로 분
 ```
 src/
 ├── __init__.py
-├── analysis/
-│   ├── __init__.py
-│   └── utils.py
 └── baseline/
     ├── __init__.py
     └── run_baseline.py
+
+eda/
+├── __init__.py
+└── utils.py
 ```
 
 ### 작업 단계
@@ -168,13 +169,13 @@ seaborn>=0.12.0
 
 ---
 
-## Phase 3: EDA 템플릿 노트북 작성 (`notebooks/eda_template.ipynb`)
+## Phase 3: EDA 템플릿 노트북 작성 (`eda/eda_template.ipynb`)
 
 ### 목표
 `merged_dataset` 도착 시 즉시 실행할 수 있는 분석 노트북
 
 ### 의존
-- Phase 2의 `src/analysis/utils.py` 함수를 import
+- Phase 2의 `eda/utils.py` 함수를 import
 
 ### 노트북 섹션 구성
 
@@ -291,8 +292,8 @@ if __name__ == "__main__":
 |---|---|---|---|
 | 1 | S3 샘플 확인 + raw 구조 정리 | `docs/raw_schema_check.md` | 1시간 |
 | 2 | 데이터 계약서 작성 | `docs/data_contract_for_A.md` | 1시간 |
-| 3 | 분석 함수 작성 | `src/analysis/utils.py` | 2.5시간 |
-| 4 | EDA 노트북 작성 | `notebooks/eda_template.ipynb` | 2시간 |
+| 3 | 분석 함수 작성 | `eda/utils.py` | 2.5시간 |
+| 4 | EDA 노트북 작성 | `eda/eda_template.ipynb` | 2시간 |
 | 5 | baseline 뼈대 작성 | `src/baseline/run_baseline.py` | 1.5시간 |
 
 **합계: 약 8시간 (넉넉히 1.5일)**
@@ -335,6 +336,6 @@ seaborn>=0.12.0
 
 1. `merged_dataset.csv`를 `data/` 에 배치
 2. 데이터 계약서 대비 검증 (컬럼, dtype, 유일키, 결측 형식)
-3. `notebooks/eda_template.ipynb` 전체 실행
+3. `eda/eda_template.ipynb` 전체 실행
 4. baseline 성능 측정 → 팀 공유
 5. 주요 비율 컬럼 Top 후보 정리
