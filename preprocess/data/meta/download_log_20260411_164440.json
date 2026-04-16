@@ -1,0 +1,28 @@
+{
+  "log_type": "download",
+  "executed_at": "2026-04-11T16:44:40.806139+09:00",
+  "elapsed_sec": 18088.66,
+  "elapsed_str": "301분 28초",
+  "settings": {
+    "workers": 10,
+    "max_retries": 3,
+    "filters": {
+      "status": null,
+      "sector": null,
+      "ticker": null,
+      "year": null,
+      "quarter": null,
+      "force": false
+    },
+    "output_dir": "C:\\kwu\\KW0SS_PROJECT\\kw0ss_project2\\data\\raw"
+  },
+  "s3_total_found": 46147,
+  "result": {
+    "downloaded": 45512,
+    "skipped": 635,
+    "failed": 0,
+    "success_rate": "98.6%"
+  },
+  "failed_keys": [],
+  "snapshot_file": "C:\\kwu\\KW0SS_PROJECT\\kw0ss_project2\\data\\meta\\s3_snapshot_20260411_114335.json"
+}
