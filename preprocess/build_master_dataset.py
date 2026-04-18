@@ -6,32 +6,18 @@ step1_build_combined.py
 수행 작업:
   1. raw/healthy, raw/delisted 의 JSON → 재무비율 계산 (전처리 없이 원본 그대로)
   2. 구조적 상폐 / 더미 종목 제거
-  3. YoY 증가율 계산 (매출액/순이익/영업이익)
-  4. 연도별 현황 출력 (Step 2의 split 기준 결정용)
-  5. combined_raw.csv 저장
+  3. 연도별 현황 출력 (Step 2의 split 기준 결정용)
+  4. combined_raw.csv 저장
 
 NOTE:
   - clean_data.csv 사용 안 함 (raw 폴더에 전체 원본 JSON이 있으므로)
   - 전처리(결측치 보간, 이상치 클리핑)는 Step 2에서 split 이후에 수행
-  - 매출액/순이익/영업이익 증가율은 IS frmtrm 결측 문제로 YoY 방식 사용
-    (ratio_calculator.py에서 제거, 여기서 전담)
-
-수정 이력
-─────────
-[2025-04-17] YoY 증가율 계산 통합.
-  - DART 분기/반기 보고서의 IS frmtrm 미기재로 frmtrm 기반 증가율
-    Q1/H1/Q3 결측률 92%+ 확인 → 전년 동기(YoY) 조인 방식으로 교체.
-  - ratio_calculator.py에서 매출액/순이익/영업이익 증가율 함수 제거.
-  - process_folder()에서 YoY 계산용 원본값(revenue, net_income,
-    operating_income) 임시 저장 후 _add_yoy_growth_cols()에서 전년
-    동기 조인으로 증가율 계산. 임시 컬럼은 저장 전 제거됨.
-  - 개선 결과: 결측률 64~74% → 6~18% (valid/test 기준 74% → 6~7%)
 
 출력:
   data/processed/combined_raw.csv   ← Step 2 입력 (전처리 전 원본)
 
 실행:
-  python build_master_dataset.py
+  python step1_build_combined.py
 """
 
 import json
@@ -64,15 +50,6 @@ EXCLUDE_CODES = {
 }
 
 PATTERN = re.compile(r"^(\d{6})_(\d{4})_(Q1|Q3|H1|ANNUAL)\.json$")
-
-# [2025-04-17] YoY 증가율 계산 대상.
-# (컬럼명, 원본 피처명) 쌍.
-# ratio_calculator.py에서 제거된 IS 증가율 3개를 여기서 전담.
-YOY_TARGETS: list[tuple[str, str]] = [
-    ("매출액증가율",   "revenue"),
-    ("순이익증가율",   "net_income"),
-    ("영업이익증가율", "operating_income"),
-]
 
 
 # ─────────────────────────────────────────────────────────────
@@ -133,14 +110,6 @@ def process_folder(folder: Path, label: int) -> pd.DataFrame:
             "gics_sector": sector,
         }
         record.update(ratios)
-
-        # [2025-04-17] YoY 증가율 계산용 원본값 임시 저장.
-        # _add_yoy_growth_cols()에서 전년 동기 조인에 사용 후 제거됨.
-        # 컬럼명 앞에 '_yoy_src_' prefix를 붙여 최종 출력 컬럼과 구분.
-        for _, feat in YOY_TARGETS:
-            entry = std_items.get(feat)
-            record[f"_yoy_src_{feat}"] = entry.get("thstrm") if entry else None
-
         records.append(record)
 
     if fail_count:
@@ -149,64 +118,7 @@ def process_folder(folder: Path, label: int) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 
-# ─────────────────────────────────────────────────────────────
-# 2. YoY 증가율 계산
-# ─────────────────────────────────────────────────────────────
-def _add_yoy_growth_cols(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    전년 동기(YoY) 조인으로 IS 증가율 3개 계산 후 임시 컬럼 제거.
-
-    처리 흐름:
-      1. (stock_code, year-1, quarter) 키로 전년 동기 값 조인
-      2. (당기 - 전기) / |전기| * 100 계산
-         - 분모 abs(): 전기 음수 시 부호 왜곡 방지
-         - 전기 0: NaN 처리
-      3. _yoy_src_* 임시 컬럼 제거
-    """
-    df = df.copy()
-    df["_prev_year"] = df["year"] - 1
-
-    src_cols = [f"_yoy_src_{feat}" for _, feat in YOY_TARGETS]
-
-    # 전년 동기 값 조인
-    prev_df = df[["stock_code", "year", "quarter"] + src_cols].copy()
-    prev_df = prev_df.rename(columns={c: f"{c}_prev" for c in src_cols})
-
-    df = df.merge(
-        prev_df,
-        left_on=["stock_code", "_prev_year", "quarter"],
-        right_on=["stock_code", "year", "quarter"],
-        suffixes=("", "_prev_key"),
-        how="left",
-    )
-
-    # merge로 생긴 중복 key 컬럼 제거
-    for col in ["year_prev_key", "quarter_prev_key"]:
-        if col in df.columns:
-            df = df.drop(columns=[col])
-
-    # YoY 증가율 계산
-    for col_name, feat in YOY_TARGETS:
-        src      = f"_yoy_src_{feat}"
-        src_prev = f"_yoy_src_{feat}_prev"
-
-        curr  = df[src]
-        prev  = df[src_prev]
-        denom = prev.abs()
-
-        growth = (curr - prev) / denom * 100
-        growth[denom == 0] = np.nan   # 전기 0이면 NaN
-        df[col_name] = growth
-
-    # 임시 컬럼 제거 (_yoy_src_* 및 조인용 _prev_year)
-    drop_cols = (
-        ["_prev_year"]
-        + src_cols
-        + [f"{c}_prev" for c in src_cols]
-    )
-    df = df.drop(columns=[c for c in drop_cols if c in df.columns])
-
-    return df
+# integrate 함수 제거 — raw 폴더에서 전체 재계산하므로 불필요
 
 
 # ─────────────────────────────────────────────────────────────
@@ -221,10 +133,10 @@ def print_yearly_stats(df: pd.DataFrame):
 
     by_year = df.groupby("year")
     for year, grp in by_year:
-        total         = len(grp)
-        companies     = grp["stock_code"].nunique()
+        total     = len(grp)
+        companies = grp["stock_code"].nunique()
         pos_companies = grp[grp["label"] == 1]["stock_code"].nunique()
-        pos_rows      = int(grp["label"].sum())
+        pos_rows  = int(grp["label"].sum())
         flag = "  ← 양성 10개 미만" if pos_rows < 10 else ""
         print(f"  {int(year):<6} {total:>8,} {companies:>7,} "
               f"{pos_companies:>10} {pos_rows:>9}{flag}")
@@ -250,7 +162,7 @@ def main():
     print("=" * 65)
 
     # JSON → 재무비율 (healthy + delisted 전체)
-    print("\n[1/3] raw 데이터 변환 중...")
+    print("\n[1/2] raw 데이터 변환 중...")
     healthy  = process_folder(RAW_HEALTHY,  label=0)
     delisted = process_folder(RAW_DELISTED, label=1)
     combined = pd.concat([healthy, delisted], ignore_index=True)
@@ -261,20 +173,13 @@ def main():
           f"(healthy {len(healthy):,} + delisted {len(delisted):,})")
     print(f"  기업 수: {combined['stock_code'].nunique():,}")
 
-    # YoY 증가율 계산
-    print("\n[2/3] YoY 증가율 계산 중...")
-    combined = _add_yoy_growth_cols(combined)
-    for col_name, _ in YOY_TARGETS:
-        null_rate = combined[col_name].isna().mean()
-        print(f"  {col_name} 결측률: {null_rate:.1%}")
-
     # 저장
     out_path = OUT_DIR / "combined_raw.csv"
     combined.to_csv(out_path, index=False)
-    print(f"\n  저장 완료 → {out_path}")
+    print(f"  저장 완료 → {out_path}")
 
     # 연도별 현황 출력
-    print("\n[3/3] 연도별 현황 확인...")
+    print("\n[2/2] 연도별 현황 확인...")
     print_yearly_stats(combined)
 
     print("\n" + "=" * 65)
