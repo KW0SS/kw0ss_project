@@ -13,7 +13,23 @@ step2_label_and_preprocess.py
      - CF=0
      - 섹터·분기 중앙값 보간
      - 이상치 클리핑
+     - (옵션) Winsorize
+     - (옵션) RobustScaler
   6. H별 데이터셋 저장
+
+수정 이력
+─────────
+[2025-04-18] Preprocessor에 Winsorize / RobustScaler 옵션 추가.
+  - 수익성 계열 피처(매출액순이익률 등) 왜도 -206~-172, 첨도 20000~43000으로
+    극단값 분포 확인 → robust 처리 필요성 확인 (analyze_profitability.py 결과)
+  - 판별력은 전 피처 MWU p=0.0000으로 유의, 연도별 패턴도 일관 → 제거 금지
+  - clipping 경계값 집중은 0%대로 문제 없음 → 현재 DOMAIN_RULES 범위 유지
+  - 모델링 단계에서 4가지 실험 설정 비교 예정:
+      baseline  : clipping만
+      exp-A     : clipping + Winsorize
+      exp-B     : clipping + RobustScaler
+      exp-C     : clipping + Winsorize + RobustScaler
+  - Preprocessor(winsorize=True/False, robust_scale=True/False) 로 제어
 
 출력 구조:
   data/processed/
@@ -23,7 +39,7 @@ step2_label_and_preprocess.py
     ...
 
 실행:
-  python step2_label_and_preprocess.py
+  python build_h_dataset.py
 """
 
 import json
@@ -32,6 +48,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.stats.mstats import winsorize as scipy_winsorize
+from sklearn.preprocessing import RobustScaler
 
 warnings.filterwarnings("ignore")
 
@@ -51,15 +69,15 @@ H_LIST = [6, 8, 10, 12, 14, 16, 18, 20, 22, 24]
 TRAIN_YEARS = list(range(2015, 2023))   # 2015~2022
 VALID_YEARS = [2023]
 TEST_YEARS  = [2024]
-# 2025는 H별로 train 포함 여부 자동 결정
 
 # 상폐현황 파일 기준 날짜 (라벨 확정 가능 마지막 날)
 REFERENCE_DATE = pd.Timestamp("2026-03-31")
 
 # 재무비율 컬럼
 RATIO_COLS = [
-    '총자산증가율', '유동자산증가율', '매출액순이익률', '매출총이익률',
-    '자기자본순이익률', '매출채권회전율', '재고자산회전율', '총자본회전율',
+    '총자산증가율', '유동자산증가율', '매출액증가율', '순이익증가율', '영업이익증가율',
+    '매출액순이익률', '매출총이익률', '자기자본순이익률',
+    '매출채권회전율', '재고자산회전율', '총자본회전율',
     '유형자산회전율', '매출원가율', '부채비율', '유동비율', '자기자본비율',
     '당좌비율', '비유동자산장기적합률', '순운전자본비율', '차입금의존도',
     '현금비율', '유형자산', '무형자산', '총자본영업이익률', '총자본순이익률',
@@ -92,6 +110,20 @@ DOMAIN_RULES = {
     '비유동자산장기적합률':   (0,    2000),
     '총자본투자효율':         (-500, 100),
 }
+
+# [2025-04-18] Winsorize 적용 대상 피처.
+# analyze_profitability.py 결과 기준 왜도/첨도가 극단적인 수익성 계열.
+# 판별력은 유의하므로 제거 금지, robust 처리만 적용.
+WINSORIZE_COLS = [
+    '매출액순이익률',
+    '자기자본순이익률',
+    '총자본영업이익률',
+    '총자본순이익률',
+    '매출총이익률',
+]
+
+# Winsorize 분위수 범위 (양쪽 1% 잘라냄)
+WINSORIZE_LIMITS = (0.01, 0.01)
 
 QUARTER_TO_MONTH = {"Q1": 3, "H1": 6, "Q3": 9, "ANNUAL": 12}
 
@@ -128,37 +160,30 @@ def build_rolling_labels(df: pd.DataFrame,
         0  = 정상
        -1  = 상폐현황 미매칭 (수동 확인 필요)
        -2  = 이미 상폐된 이후 시점 (학습 불가)
+       -3  = 라벨 미확정 (T+H가 기준일 이후)
     """
     df = df.copy()
     df["period_date"] = df.apply(
         lambda r: q2date(int(r["year"]), r["quarter"]), axis=1
     )
 
-    # T + H개월 이후는 라벨 미확정 → 제외 기준
     cutoff = REFERENCE_DATE - pd.DateOffset(months=H)
 
     def assign(row):
-        # 라벨 미확정 구간
         if row["period_date"] > cutoff:
-            return -3   # 미확정 → 나중에 제거
-
-        # 정상 기업
+            return -3
         if row["label"] == 0:
             return 0
-
-        # 상폐 기업
         code = row["stock_code"]
         t    = row["period_date"]
-
         if code not in delist_map or pd.isna(delist_map[code]):
-            return -1   # 미매칭
-
+            return -1
         dd = delist_map[code]
         if dd <= t:
-            return -2   # 이미 상폐 이후
+            return -2
         if t < dd <= t + pd.DateOffset(months=H):
-            return 1    # 양성
-        return 0        # H개월 초과 → 아직 정상
+            return 1
+        return 0
 
     df["rolling_label"] = df.apply(assign, axis=1)
     return df
@@ -187,11 +212,10 @@ def time_split(df: pd.DataFrame, H: int):
     2025년은 H에 따라 자동으로 train에 포함되거나 제외됨.
     """
     valid_df = df[df["rolling_label"].isin([0, 1])].copy()
-    # 원본 label 컬럼 제거 후 rolling_label을 label로 대체
-    valid_df = valid_df.drop(columns=["label", "period_date", "data_source"], errors="ignore")
+    valid_df = valid_df.drop(
+        columns=["label", "period_date", "data_source"], errors="ignore"
+    )
     valid_df = valid_df.rename(columns={"rolling_label": "label"})
-
-    # 2015년 이전 제거
     valid_df = valid_df[valid_df["year"] >= 2015]
 
     train = valid_df[valid_df["year"].isin(TRAIN_YEARS +
@@ -208,10 +232,45 @@ def time_split(df: pd.DataFrame, H: int):
 # 5. 전처리 클래스
 # ─────────────────────────────────────────────────────────────
 class Preprocessor:
-    def __init__(self):
+    """
+    전처리 파이프라인.
+
+    Parameters
+    ----------
+    winsorize : bool
+        True면 WINSORIZE_COLS 대상으로 양쪽 1% winsorize 적용.
+        train에서 분위수를 fit하고 valid/test에는 transform만 적용.
+    robust_scale : bool
+        True면 RATIO_COLS 전체에 RobustScaler 적용.
+        중앙값/IQR 기반이라 극단값 영향을 줄임.
+        GBDT 계열은 필수 아니나 FNN 앙상블 포함 시 필요.
+
+    실험 설정
+    ---------
+    baseline : Preprocessor(winsorize=False, robust_scale=False)
+    exp-A    : Preprocessor(winsorize=True,  robust_scale=False)
+    exp-B    : Preprocessor(winsorize=False, robust_scale=True)
+    exp-C    : Preprocessor(winsorize=True,  robust_scale=True)
+    """
+
+    def __init__(
+        self,
+        winsorize: bool = False,
+        robust_scale: bool = False,
+    ):
+        self.winsorize    = winsorize
+        self.robust_scale = robust_scale
+
         self.sector_quarter_medians = {}
         self.global_medians         = {}
         self.clip_bounds            = {}
+
+        # Winsorize fit 결과 (train 기준 분위수)
+        self.winsorize_bounds: dict[str, tuple[float, float]] = {}
+
+        # RobustScaler fit 결과
+        self._robust_scaler: RobustScaler | None = None
+        self._robust_cols:   list[str]           = []
 
     def fit(self, train: pd.DataFrame) -> "Preprocessor":
         ratio_cols_present = [c for c in RATIO_COLS if c in train.columns]
@@ -235,6 +294,23 @@ class Preprocessor:
                 hi  = q3 + 3 * iqr
             self.clip_bounds[col] = (float(lo), float(hi))
 
+        # [2025-04-18] Winsorize: train 기준 분위수 fit
+        if self.winsorize:
+            win_cols = [c for c in WINSORIZE_COLS if c in train.columns]
+            for col in win_cols:
+                s = train[col].dropna()
+                lo = float(s.quantile(WINSORIZE_LIMITS[0]))
+                hi = float(s.quantile(1 - WINSORIZE_LIMITS[1]))
+                self.winsorize_bounds[col] = (lo, hi)
+
+        # [2025-04-18] RobustScaler: train 기준 fit
+        if self.robust_scale:
+            self._robust_cols = ratio_cols_present
+            self._robust_scaler = RobustScaler()
+            # 결측치 임시 0 대체 후 fit (transform 시 실제 보간값으로 대체됨)
+            fit_data = train[self._robust_cols].fillna(0)
+            self._robust_scaler.fit(fit_data)
+
         return self
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -248,8 +324,7 @@ class Preprocessor:
         )
 
         # 2. CF=0 (감가상각비 계열)
-        cf_cols = [c for c in df.columns
-                   if "상각비" in c or "감가" in c]
+        cf_cols = [c for c in df.columns if "상각비" in c or "감가" in c]
         for col in cf_cols:
             df[col] = df[col].fillna(0)
 
@@ -259,11 +334,9 @@ class Preprocessor:
                 def _fill(row, col=col):
                     key = (row["gics_sector"], row["quarter"], col)
                     return self.sector_quarter_medians.get(key, np.nan)
-
                 mask = df[col].isna()
                 df.loc[mask, col] = df[mask].apply(_fill, axis=1)
 
-            # 전체 중앙값 fallback
             still_na = df[col].isna()
             if still_na.any():
                 df.loc[still_na, col] = self.global_medians.get(col, 0)
@@ -273,15 +346,40 @@ class Preprocessor:
             if col in df.columns:
                 df[col] = df[col].clip(lo, hi)
 
+        # 5. [2025-04-18] Winsorize (옵션)
+        # clipping 후 적용. train에서 fit한 분위수로 valid/test도 동일하게 처리.
+        if self.winsorize:
+            for col, (lo, hi) in self.winsorize_bounds.items():
+                if col in df.columns:
+                    df[col] = df[col].clip(lo, hi)
+
+        # 6. [2025-04-18] RobustScaler (옵션)
+        # 중앙값/IQR 기반 스케일링. 극단값 영향을 줄이되 값 자체는 보존.
+        # GBDT 계열은 필수 아니나 FNN 앙상블 포함 시 필요.
+        if self.robust_scale and self._robust_scaler is not None:
+            cols = [c for c in self._robust_cols if c in df.columns]
+            df[cols] = self._robust_scaler.transform(df[cols].fillna(0))
+
         return df
 
     def to_dict(self) -> dict:
         return {
+            "winsorize":    self.winsorize,
+            "robust_scale": self.robust_scale,
             "sector_quarter_medians": {
                 str(k): v for k, v in self.sector_quarter_medians.items()
             },
-            "global_medians": self.global_medians,
-            "clip_bounds":    self.clip_bounds,
+            "global_medians":    self.global_medians,
+            "clip_bounds":       self.clip_bounds,
+            "winsorize_bounds":  self.winsorize_bounds,
+            "robust_scale_center": (
+                self._robust_scaler.center_.tolist()
+                if self._robust_scaler else []
+            ),
+            "robust_scale_scale": (
+                self._robust_scaler.scale_.tolist()
+                if self._robust_scaler else []
+            ),
         }
 
 
@@ -306,23 +404,29 @@ def main():
     # 거시경제 데이터
     df = merge_macro(df, MACRO_CSV)
 
-    # H별 처리
-    print(f"\nH값 목록: {H_LIST}\n")
+    # 실험 설정 목록: (실험명, winsorize, robust_scale)
+    EXPERIMENTS = [
+        ("baseline", False, False),
+        ("exp-A",    True,  False),
+        ("exp-B",    False, True),
+        ("exp-C",    True,  True),
+    ]
 
-    summary = []
+    # H별 처리
+    # 저장 구조: data/processed/H{H}/{실험명}/train|valid|test.csv
+    print(f"\nH값 목록: {H_LIST}")
+    print(f"실험 설정: {[e[0] for e in EXPERIMENTS]}\n")
+
+    summary: list[dict] = []
 
     for H in H_LIST:
         print(f"\n{'─'*55}")
         print(f"  H = {H}개월")
         print(f"{'─'*55}")
 
-        out_dir = OUT_BASE / f"H{H}"
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        # 라벨링
+        # 라벨링 및 split은 H당 1회 수행 (실험 설정과 무관)
         labeled = build_rolling_labels(df, H, delist_map)
 
-        # 유효 행 통계
         valid_rows   = labeled[labeled["rolling_label"].isin([0, 1])]
         invalid_rows = labeled[~labeled["rolling_label"].isin([0, 1])]
         print(f"  유효 행: {len(valid_rows):,} "
@@ -332,74 +436,82 @@ def main():
               f"-2 상폐후: {(labeled['rolling_label']==-2).sum()}, "
               f"-1 미매칭: {(labeled['rolling_label']==-1).sum()})")
 
-        # Time split
-        train, valid, test = time_split(labeled, H)
-        print(f"  train: {len(train):,}행 | 양성 {int(train['label'].sum())}")
-        print(f"  valid: {len(valid):,}행 | 양성 {int(valid['label'].sum())}")
-        print(f"  test : {len(test):,}행  | 양성 {int(test['label'].sum())}")
+        train_raw, valid_raw, test_raw = time_split(labeled, H)
+        print(f"  train: {len(train_raw):,}행 | 양성 {int(train_raw['label'].sum())}")
+        print(f"  valid: {len(valid_raw):,}행 | 양성 {int(valid_raw['label'].sum())}")
+        print(f"  test : {len(test_raw):,}행  | 양성 {int(test_raw['label'].sum())}")
 
-        # valid/test 양성 부족 경고
-        if int(valid["label"].sum()) < 20:
-            print(f"  [경고] valid 양성 샘플 부족 ({int(valid['label'].sum())}개)")
-        if int(test["label"].sum()) < 20:
-            print(f"  [경고] test 양성 샘플 부족 ({int(test['label'].sum())}개)")
+        if int(valid_raw["label"].sum()) < 20:
+            print(f"  [경고] valid 양성 샘플 부족 ({int(valid_raw['label'].sum())}개)")
+        if int(test_raw["label"].sum()) < 20:
+            print(f"  [경고] test 양성 샘플 부족 ({int(test_raw['label'].sum())}개)")
 
-        # 전처리 fit (train 기준)
-        prep = Preprocessor()
-        prep.fit(train)
+        # 실험 설정별 전처리 및 저장
+        for exp_name, do_winsorize, do_robust in EXPERIMENTS:
+            out_dir = OUT_BASE / f"H{H}" / exp_name
+            out_dir.mkdir(parents=True, exist_ok=True)
 
-        train = prep.transform(train)
-        valid = prep.transform(valid)
-        test  = prep.transform(test)
+            prep = Preprocessor(winsorize=do_winsorize, robust_scale=do_robust)
+            prep.fit(train_raw)
 
-        # 저장
-        train.to_csv(out_dir / "train.csv", index=False)
-        valid.to_csv(out_dir / "valid.csv", index=False)
-        test.to_csv(out_dir  / "test.csv",  index=False)
+            train = prep.transform(train_raw)
+            valid = prep.transform(valid_raw)
+            test  = prep.transform(test_raw)
 
-        meta = {
-            "H_months":      H,
-            "train_years":   TRAIN_YEARS,
-            "valid_years":   VALID_YEARS,
-            "test_years":    TEST_YEARS,
-            "train_rows":    len(train),
-            "valid_rows":    len(valid),
-            "test_rows":     len(test),
-            "train_pos":     int(train["label"].sum()),
-            "valid_pos":     int(valid["label"].sum()),
-            "test_pos":      int(test["label"].sum()),
-            "imbalance_ratio": round(
-                (len(train) - int(train["label"].sum()))
-                / max(int(train["label"].sum()), 1), 1
-            ),
-            "preprocessor":  prep.to_dict(),
-        }
-        with open(out_dir / "meta.json", "w", encoding="utf-8") as f:
-            json.dump(meta, f, ensure_ascii=False, indent=2)
+            train.to_csv(out_dir / "train.csv", index=False)
+            valid.to_csv(out_dir / "valid.csv", index=False)
+            test.to_csv(out_dir  / "test.csv",  index=False)
 
-        print(f"  저장 완료 → {out_dir}")
+            meta = {
+                "H_months":        H,
+                "experiment":      exp_name,
+                "winsorize":       do_winsorize,
+                "robust_scale":    do_robust,
+                "train_years":     TRAIN_YEARS,
+                "valid_years":     VALID_YEARS,
+                "test_years":      TEST_YEARS,
+                "train_rows":      len(train),
+                "valid_rows":      len(valid),
+                "test_rows":       len(test),
+                "train_pos":       int(train["label"].sum()),
+                "valid_pos":       int(valid["label"].sum()),
+                "test_pos":        int(test["label"].sum()),
+                "imbalance_ratio": round(
+                    (len(train) - int(train["label"].sum()))
+                    / max(int(train["label"].sum()), 1), 1
+                ),
+                "preprocessor":    prep.to_dict(),
+            }
+            with open(out_dir / "meta.json", "w", encoding="utf-8") as f:
+                json.dump(meta, f, ensure_ascii=False, indent=2)
 
-        summary.append({
-            "H":          H,
-            "train_pos":  int(train["label"].sum()),
-            "valid_pos":  int(valid["label"].sum()),
-            "test_pos":   int(test["label"].sum()),
-            "imbalance":  meta["imbalance_ratio"],
-        })
+            print(f"  [{exp_name}] 저장 완료 → {out_dir}")
 
-    # 전체 요약
+            summary.append({
+                "H":         H,
+                "exp":       exp_name,
+                "train_pos": int(train["label"].sum()),
+                "valid_pos": int(valid["label"].sum()),
+                "test_pos":  int(test["label"].sum()),
+                "imbalance": meta["imbalance_ratio"],
+            })
+
+    # 전체 요약 (라벨은 실험 설정과 무관하므로 baseline 기준으로만 출력)
     print("\n" + "=" * 65)
-    print("  H별 데이터셋 요약")
+    print("  H별 데이터셋 요약 (baseline 기준)")
     print("=" * 65)
     print(f"\n  {'H':>4} | {'train 양성':>10} | {'valid 양성':>10} "
           f"| {'test 양성':>9} | {'불균형':>7}")
     print("  " + "-" * 50)
     for s in summary:
+        if s["exp"] != "baseline":
+            continue
         flag = " ←" if s["valid_pos"] < 20 or s["test_pos"] < 20 else ""
         print(f"  {s['H']:>4} | {s['train_pos']:>10} | {s['valid_pos']:>10} "
               f"| {s['test_pos']:>9} | {s['imbalance']:>6.1f}:1{flag}")
 
     print("\n  ← 표시: valid/test 양성 20개 미만 — 평가 불안정")
+    print(f"\n  저장 구조: data/processed/H{{H}}/{{실험명}}/train|valid|test.csv")
 
 
 if __name__ == "__main__":
