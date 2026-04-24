@@ -16,5 +16,6 @@ data/input/companies_missing_legacy.csv
 preprocess/data/raw
 preprocess/data/extra
 preprocess/data/excluded_structural
+preprocess/data/processed/
 logs/
 prs/context.json
