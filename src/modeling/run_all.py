@@ -2,13 +2,13 @@
 전체 모델 실험 실행 스크립트.
 
 H-horizon별로 등록된 모델을 순차 학습/평가하고
-결과를 results/ 디렉터리에 저장한다.
+결과를 results/exp_XXX_<name>/ 디렉터리에 저장한다.
 
 사용법:
-    python -m src.modeling.run_all                     # 기본(H10)
-    python -m src.modeling.run_all --horizon 10 12      # 복수 horizon
-    python -m src.modeling.run_all --horizon all         # 전체 horizon
-    python -m src.modeling.run_all --models rf xgb       # 특정 모델만
+    python -m src.modeling.run_all --exp exp_001_baseline_clip
+    python -m src.modeling.run_all --exp exp_002_winsor --horizon 10 12
+    python -m src.modeling.run_all --exp exp_001_baseline_clip --models rf xgb
+    python -m src.modeling.run_all --exp exp_001_baseline_clip --horizon all
 """
 
 from __future__ import annotations
@@ -66,6 +66,7 @@ def run_single(
     horizon: int,
     data: dict,
     optimize_threshold: bool = True,
+    results_dir: Path | None = None,
 ) -> dict:
     """단일 모델 × 단일 horizon 실험을 실행한다.
 
@@ -119,6 +120,7 @@ def run_single(
         test_metrics=test_metrics,
         params=params,
         threshold=threshold,
+        results_dir=results_dir,
     )
     print(f"  Saved: {filepath.relative_to(PROJECT_ROOT)}")
     print()
@@ -144,8 +146,20 @@ def run_experiments(
     optimize_threshold: bool = True,
     include_macro: bool = True,
     include_raw_value: bool = True,
+    exp_dir: str | None = None,
 ) -> list[dict]:
-    """복수 모델 × 복수 horizon 실험을 실행한다."""
+    """복수 모델 × 복수 horizon 실험을 실행한다.
+
+    Args:
+        exp_dir: 실험 결과 저장 디렉터리 이름 (예: "exp_001_baseline_clip").
+                 None이면 results/ 루트에 저장.
+    """
+    results_dir = None
+    if exp_dir:
+        results_dir = PROJECT_ROOT / "results" / exp_dir
+        results_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Results dir: {results_dir.relative_to(PROJECT_ROOT)}")
+
     all_results = []
 
     for horizon in horizons:
@@ -165,7 +179,10 @@ def run_experiments(
                 print(f"  [SKIP] Unknown model: {key}")
                 continue
             try:
-                result = run_single(key, horizon, data, optimize_threshold)
+                result = run_single(
+                    key, horizon, data, optimize_threshold,
+                    results_dir=results_dir,
+                )
                 all_results.append(result)
             except ImportError as e:
                 print(f"  [SKIP] {key}: {e}")
@@ -186,6 +203,10 @@ def run_experiments(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Tree-based 모델 실험 실행")
+    parser.add_argument(
+        "--exp", type=str, default=None,
+        help="실험 디렉터리 이름 (예: exp_002_winsor). 없으면 results/ 루트에 저장",
+    )
     parser.add_argument(
         "--horizon", nargs="+", default=["10"],
         help="실험할 horizon (예: 10 12 또는 all)",
@@ -215,6 +236,7 @@ def main() -> None:
         optimize_threshold=not args.no_threshold_opt,
         include_macro=not args.no_macro,
         include_raw_value=not args.no_raw_value,
+        exp_dir=args.exp,
     )
 
 

@@ -23,9 +23,9 @@
 | XGBoost 실험 | **완료** | H10/H12 학습 완료, early stopping 적용 |
 | LightGBM 실험 | **완료** | H10/H12 학습 완료, early stopping 적용 |
 | CatBoost 실험 여부 검토 | **비채택** | gics_sector가 meta 컬럼이라 네이티브 범주형 이점 없음 |
-| 모델별 주요 metric 비교 (F1, ROC-AUC, PR-AUC, Recall) | 미완료 | |
-| Feature Importance 추출 | 미완료 | |
-| 결과 리포트 정리 및 다음 실험 방향 설정 | 미완료 | |
+| 모델별 주요 metric 비교 (F1, ROC-AUC, PR-AUC, Recall) | **완료** | H10/H12 × 4모델, `results/comparison_test.csv` |
+| Feature Importance 추출 | **완료** | 4모델 평균, `results/feature_importance_H{10,12}.csv` |
+| 결과 리포트 정리 및 다음 실험 방향 설정 | **완료** | `results/summary.md` |
 
 ---
 
