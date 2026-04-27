@@ -17,12 +17,12 @@
 | 학습용 데이터셋 입력 포맷 점검 (train/valid/test) | **완료** | H6~H24 총 10개 horizon, 연도 기반 time split |
 | 수치형/범주형 피처 분리 및 전처리 기준 확정 | **완료** | `classify_columns()` — ratio/raw_value/macro 분류 |
 | 결측치 처리 방식 정의 | **완료** | 섹터·분기 중앙값 보간 + 클리핑, meta.json에 기준값 저장 |
-| 클래스 불균형 대응 전략 적용 | **부분** | class_weight="balanced"만 적용, sampling 미적용 |
-| Random Forest baseline 학습 | 미완료 | |
-| Gradient Boosting 계열 baseline 학습 | 미완료 | |
-| XGBoost 실험 | 미완료 | |
-| LightGBM 실험 | 미완료 | |
-| CatBoost 실험 여부 검토 | 미완료 | |
+| 클래스 불균형 대응 전략 적용 | **완료** | 7전략 비교 → baseline+threshold 최적화 확정, sampling 불채택 |
+| Random Forest baseline 학습 | **완료** | H10/H12 학습 완료, PR-AUC 1위 |
+| Gradient Boosting 계열 baseline 학습 | **완료** | H10/H12 학습 완료 |
+| XGBoost 실험 | **완료** | H10/H12 학습 완료, early stopping 적용 |
+| LightGBM 실험 | **완료** | H10/H12 학습 완료, early stopping 적용 |
+| CatBoost 실험 여부 검토 | **비채택** | gics_sector가 meta 컬럼이라 네이티브 범주형 이점 없음 |
 | 모델별 주요 metric 비교 (F1, ROC-AUC, PR-AUC, Recall) | 미완료 | |
 | Feature Importance 추출 | 미완료 | |
 | 결과 리포트 정리 및 다음 실험 방향 설정 | 미완료 | |
