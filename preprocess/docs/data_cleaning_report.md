@@ -247,6 +247,30 @@
 
 > 섹터 분포의 큰 변동은 KSIC→GICS 매핑 v4 적용 결과이며, 이번 정합성 작업과는 별개입니다. 또한 gics_sector는 학습 피처에서 제외되어 모델 성능에 영향 없습니다.
 
+#### 섹터별 양성 샘플 분포
+
+H12 train 기준:
+
+| 섹터 | 행수 | 양성 | 양성 비율 |
+|---|---|---|---|
+| Information Technology | 10,718 | 86 | 0.80% |
+| Industrials | 8,119 | 72 | 0.89% |
+| Materials | 3,956 | 21 | 0.53% |
+| Health Care | 3,585 | 5 | **0.14%** |
+| Consumer Discretionary | 1,555 | 23 | 1.48% |
+| Communication Services | 1,817 | 12 | 0.66% |
+| Consumer Staples | 800 | 28 | 3.50% |
+| Financials | 601 | 3 | 0.50% |
+| Real Estate | 128 | 0 | 0.00% |
+| Energy | 60 | 0 | 0.00% |
+| Utilities | 21 | 0 | 0.00% |
+
+
+### 모델링 시 고려사항
+- 섹터별 독립 모델 학습은 표본 부족으로 부적절 (4/27 결정 그대로)
+- gics_sector를 META 컬럼으로 두고 학습 피처에서 제외
+- 학습 후 평가 시 섹터별 성능 별도 분석 권장
+
 ---
 
 ## 부록: 사용한 검증 스크립트
