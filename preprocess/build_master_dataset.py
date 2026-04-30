@@ -6,36 +6,40 @@ build_master_dataset.py
 수행 작업:
   1. raw/healthy, raw/delisted 의 JSON → 재무비율 계산 (전처리 없이 원본 그대로)
   2. 구조적 상폐 / 더미 종목 제거
-  3. YoY 증가율 계산 (매출액/순이익/영업이익)
-  4. 연도별 현황 출력 (Step 2의 split 기준 결정용)
-  5. combined_raw.csv 저장
+  3. (code, year, quarter) 중복 키 dedup  ← 추가
+  4. YoY 증가율 계산 (매출액/순이익/영업이익)
+  5. KRX 상장일 기반 비상장 기간 데이터 제거 (옵션, 기본 ON)  ← 추가
+  6. 연도별 현황 출력 (Step 2의 split 기준 결정용)
+  7. combined_raw.csv 저장
 
 NOTE:
   - clean_data.csv 사용 안 함 (raw 폴더에 전체 원본 JSON이 있으므로)
   - 전처리(결측치 보간, 이상치 클리핑)는 Step 2에서 split 이후에 수행
   - 매출액/순이익/영업이익 증가율은 IS frmtrm 결측 문제로 YoY 방식 사용
-    (ratio_calculator.py에서 제거, 여기서 전담)
 
 수정 이력
 ─────────
 [2025-04-17] _CFS, _OFS suffix 대응 패턴 추가.
 [2025-04-17] YoY 증가율 계산 추가.
-  - DART 분기/반기 보고서는 IS frmtrm을 비워 공시하는 경우가 많아
-    기존 frmtrm 기반 증가율 계산 시 Q1/H1/Q3 결측률 92%+.
-  - 전년 동기(YoY) 방식으로 교체: 결측률 74% → 14%로 개선.
-  - process_file()에서 revenue/net_income/operating_income thstrm 값 보존.
-  - _add_yoy_growth_cols()에서 전년 동기 조인 후 증가율 계산.
 [2025-04-27] process_folder 병렬처리 추가 (ProcessPoolExecutor).
-  - 단일 프로세스 대비 workers 수만큼 처리 속도 향상.
-  - workers 기본값: CPU 코어 수 - 1.
-  - 실행: python build_master_dataset.py --workers 8
+[2026-04-30] 정합성 처리 통합:
+  - (stock_code, year, quarter) dedup 추가
+    : 같은 키가 raw 폴더의 섹터 중복 / _CFS·_OFS 변형 때문에 여러 행으로
+      만들어지는 문제 (별도 진단 결과 31개 기업, 1,922행 영향).
+    : 같은 키 내에서 첫 행만 유지 (값은 중복이라 동등).
+  - KRX 상장일 기반 비상장 데이터 제거 추가 (--filter-by-listing-date, 기본 ON)
+    : 종목코드 재사용으로 신 회사의 데이터에 옛 회사 데이터가 섞여 들어가는
+      문제 (036220 오상헬스케어 등 10개 기업, 83행 영향).
+    : 상장법인목록.xlsx 파일 없으면 경고만 출력하고 skip.
+  - 기존 patch_remove_prelisting_rows.py, patch_dedupe_combined.py는 폐기 대상.
 
 출력:
   data/processed/combined_raw.csv   ← Step 2 입력 (전처리 전 원본)
 
 실행:
   python build_master_dataset.py
-  python build_master_dataset.py --workers 8  # workers 수 직접 지정
+  python build_master_dataset.py --workers 8
+  python build_master_dataset.py --no-listing-filter   # 상장일 필터 skip
 """
 
 import json
@@ -54,13 +58,16 @@ from tqdm import tqdm
 warnings.filterwarnings("ignore")
 
 # ─────────────────────────────────────────────────────────────
-# 경로 설정  ← 필요시 수정
+# 경로 설정
 # ─────────────────────────────────────────────────────────────
 BASE_DIR     = Path(r"C:\kwu\KW0SS_PROJECT\kw0ss_project2\preprocess")
 RAW_HEALTHY  = BASE_DIR / "data" / "raw" / "healthy"
 RAW_DELISTED = BASE_DIR / "data" / "raw" / "delisted"
 OUT_DIR      = BASE_DIR / "data" / "processed"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# KRX 상장법인목록 (선택적 의존성)
+LISTED_XLSX = BASE_DIR / "data" / "상장법인목록.xlsx"
 
 # 제거 대상: 구조적 상폐 4개 + 더미
 EXCLUDE_CODES = {
@@ -71,12 +78,8 @@ EXCLUDE_CODES = {
     "999999",  # 더미
 }
 
-# [2025-04-17] _CFS, _OFS suffix 대응 추가
-# 수집 스크립트 버전에 따라 파일명에 _CFS가 붙는 경우가 있음
 PATTERN = re.compile(r"^(\d{6})_(\d{4})_(Q1|Q3|H1|ANNUAL)(?:_CFS|_OFS)?\.json$")
 
-# [2025-04-17] YoY 증가율 계산용 원본 항목 목록
-# thstrm(당기) 값만 저장. 전년 동기 조인은 _add_yoy_growth_cols()에서 수행.
 YOY_TARGETS: list[tuple[str, str]] = [
     ("매출액증가율",   "revenue"),
     ("순이익증가율",   "net_income"),
@@ -84,15 +87,19 @@ YOY_TARGETS: list[tuple[str, str]] = [
 ]
 YOY_SOURCE_KEYS = [feat for _, feat in YOY_TARGETS]
 
+# 분기 → 분기 마지막 날짜 (상장일 비교용)
+QUARTER_END_MONTH_DAY = {
+    "Q1":     (3, 31),
+    "H1":     (6, 30),
+    "Q3":     (9, 30),
+    "ANNUAL": (12, 31),
+}
+
 
 # ─────────────────────────────────────────────────────────────
 # 1. 단일 파일 처리 (병렬 worker용)
 # ─────────────────────────────────────────────────────────────
 def process_file(args: tuple) -> dict | None:
-    """
-    단일 JSON 파일을 읽어 재무비율 record 반환.
-    ProcessPoolExecutor worker로 실행되므로 독립적으로 동작해야 함.
-    """
     fp, label, base_dir = args
 
     sys.path.insert(0, str(base_dir / "src"))
@@ -132,9 +139,6 @@ def process_file(args: tuple) -> dict | None:
     }
     record.update(ratios)
 
-    # [2025-04-17] YoY 증가율 계산용 원본값 저장
-    # DART 분기/반기 보고서는 frmtrm을 비워 공시해 기존 방식 결측률 92%+.
-    # 전년 동기 조인을 위해 thstrm 값 보존.
     for key in YOY_SOURCE_KEYS:
         entry = std_items.get(key)
         record[f"_yoy_src_{key}"] = entry.get("thstrm") if entry else None
@@ -146,15 +150,6 @@ def process_file(args: tuple) -> dict | None:
 # 2. 폴더 병렬 처리
 # ─────────────────────────────────────────────────────────────
 def process_folder(folder: Path, label: int, workers: int) -> pd.DataFrame:
-    """
-    폴더 안의 JSON 파일을 병렬로 읽어 재무비율 DataFrame 반환.
-
-    Parameters
-    ----------
-    folder  : raw/healthy 또는 raw/delisted 경로
-    label   : 0=healthy, 1=delisted
-    workers : 병렬 프로세스 수
-    """
     files  = list(folder.rglob("*.json"))
     split  = "healthy" if label == 0 else "delisted"
     print(f"  {split}: {len(files):,}개 파일 (workers={workers})")
@@ -180,26 +175,48 @@ def process_folder(folder: Path, label: int, workers: int) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────────────────────
-# 3. YoY 증가율 계산
+# 3. (code, year, quarter) dedup  ← 신규
+# ─────────────────────────────────────────────────────────────
+def _dedupe_by_key(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    같은 (stock_code, year, quarter) 키를 가진 중복 행 제거.
+
+    원인:
+      raw 폴더에 같은 JSON이 두 섹터 폴더에 있거나, _CFS·_OFS 변형이
+      함께 있는 경우 process_folder에서 중복 record가 생성됨.
+      값(재무비율)은 동일하므로 첫 행만 유지하면 안전.
+
+    Returns
+    -------
+    pd.DataFrame
+        중복이 제거된 DataFrame
+    """
+    key_cols = ["stock_code", "year", "quarter"]
+    n_before = len(df)
+    dup_counts = df.groupby(key_cols).size()
+    n_dup_keys = int((dup_counts > 1).sum())
+    n_extra    = int((dup_counts - 1).sum())
+
+    if n_dup_keys == 0:
+        print(f"  중복 키 없음 ({n_before:,}행 그대로)")
+        return df
+
+    print(f"  중복 키: {n_dup_keys:,}개 → {n_extra:,}행 제거 예정")
+    df_dedup = df.drop_duplicates(subset=key_cols, keep="first").reset_index(drop=True)
+    print(f"  {n_before:,}행 → {len(df_dedup):,}행")
+    return df_dedup
+
+
+# ─────────────────────────────────────────────────────────────
+# 4. YoY 증가율 계산 (기존)
 # ─────────────────────────────────────────────────────────────
 def _add_yoy_growth_cols(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    전년 동기 조인 방식으로 IS 증가율 3개 계산.
-
-    [2025-04-17] frmtrm 기반 계산 교체 이유:
-    DART 분기/반기 보고서는 IS frmtrm을 비워 공시하는 경우가 많아
-    Q1/H1/Q3 결측률이 92%+로 사실상 사용 불가.
-    전년 동기(YoY) 방식: 결측률 74% → 14%로 개선.
-
-    분모에 abs() 사용 이유:
-    전기가 음수일 때 단순 나눗셈은 부호가 뒤집혀 해석이 왜곡됨.
-    """
+    """전년 동기 조인 방식으로 IS 증가율 3개 계산."""
     df = df.copy()
     df["_prev_year"] = df["year"] - 1
 
     src_cols = [f"_yoy_src_{feat}" for _, feat in YOY_TARGETS]
 
-    # 전년 동기 조인: (stock_code, year-1, quarter) 기준
     prev_df = df[["stock_code", "year", "quarter"] + src_cols].copy()
     df = df.merge(
         prev_df,
@@ -210,7 +227,6 @@ def _add_yoy_growth_cols(df: pd.DataFrame) -> pd.DataFrame:
     )
     df = df.drop(columns=["year_prev", "quarter_prev"], errors="ignore")
 
-    # YoY 증가율 계산
     for col_name, feat in YOY_TARGETS:
         src      = f"_yoy_src_{feat}"
         src_prev = f"_yoy_src_{feat}_prev"
@@ -221,7 +237,6 @@ def _add_yoy_growth_cols(df: pd.DataFrame) -> pd.DataFrame:
         result[denom == 0] = np.nan
         df[col_name] = result
 
-    # 임시 컬럼 제거
     drop_cols = (
         ["_prev_year"]
         + src_cols
@@ -233,7 +248,99 @@ def _add_yoy_growth_cols(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────────────────────
-# 4. 연도별 현황 출력
+# 5. 상장일 필터링  ← 신규
+# ─────────────────────────────────────────────────────────────
+def _filter_by_listing_date(
+    df: pd.DataFrame,
+    listed_xlsx: Path,
+) -> pd.DataFrame:
+    """
+    KRX 상장법인목록을 사용해 각 기업의 상장일 이전 분기 데이터 제거.
+
+    종목코드 재사용 케이스 (같은 코드가 폐지된 다른 회사에 재할당)에서
+    신 회사의 raw 데이터에 옛 회사 데이터가 섞여 들어가는 문제 해결.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        combined raw DataFrame
+    listed_xlsx : Path
+        KRX 상장법인목록.xlsx 경로
+
+    Returns
+    -------
+    pd.DataFrame
+        상장일 이전 행이 제거된 DataFrame.
+        파일이 없거나 매핑이 없는 기업은 그대로 유지.
+    """
+    if not listed_xlsx.exists():
+        print(f"  ⚠️  {listed_xlsx} 없음 → 상장일 필터링 skip")
+        print(f"     (data/ 폴더에 KRX 상장법인목록.xlsx 다운로드 권장)")
+        return df
+
+    listed = pd.read_excel(listed_xlsx)
+    if "종목코드" not in listed.columns or "상장일" not in listed.columns:
+        print(f"  ⚠️  {listed_xlsx}에 '종목코드' 또는 '상장일' 컬럼 없음 → skip")
+        return df
+
+    listed["종목코드"] = listed["종목코드"].astype(str).str.strip()
+    # 6자리 숫자만 (스팩, ETF 등 제외)
+    listed = listed[listed["종목코드"].str.match(r"^\d{6}$")]
+    listed["상장일"] = pd.to_datetime(listed["상장일"], errors="coerce")
+    list_dt_map = dict(zip(listed["종목코드"], listed["상장일"]))
+    print(f"  상장일 매핑: {len(list_dt_map):,}개 기업")
+
+    # 분기 → quarter_end 계산
+    def quarter_end(year: int, quarter: str) -> pd.Timestamp:
+        if quarter not in QUARTER_END_MONTH_DAY:
+            return pd.NaT
+        m, d = QUARTER_END_MONTH_DAY[quarter]
+        return pd.Timestamp(year=year, month=m, day=d)
+
+    df = df.copy()
+    df["_quarter_end"] = df.apply(
+        lambda r: quarter_end(int(r["year"]), r["quarter"]),
+        axis=1,
+    )
+
+    # 각 행에 대응하는 상장일
+    df["_list_dt"] = df["stock_code"].map(list_dt_map)
+
+    # 제거 조건: 상장일 매핑이 있고 + quarter_end < 상장일
+    mask_remove = (
+        df["_list_dt"].notna()
+        & df["_quarter_end"].notna()
+        & (df["_quarter_end"] < df["_list_dt"])
+    )
+
+    n_remove = int(mask_remove.sum())
+    if n_remove == 0:
+        print(f"  상장일 이전 행 없음")
+        df = df.drop(columns=["_quarter_end", "_list_dt"])
+        return df
+
+    # 영향받는 기업 통계
+    affected = df[mask_remove].groupby("stock_code").agg(
+        n_removed=("year", "count"),
+        list_dt=("_list_dt", "first"),
+        first_year=("year", "min"),
+        last_year=("year", "max"),
+    ).reset_index()
+
+    print(f"  상장일 이전 행 {n_remove:,}개 제거 ({len(affected)}개 기업):")
+    for _, r in affected.iterrows():
+        list_str = str(r["list_dt"].date()) if pd.notna(r["list_dt"]) else "?"
+        print(f"    {r['stock_code']:<8} 상장일 {list_str} "
+              f"({int(r['first_year'])}~{int(r['last_year'])}, "
+              f"{int(r['n_removed'])}행 제거)")
+
+    df_clean = df[~mask_remove].drop(columns=["_quarter_end", "_list_dt"])
+    df_clean = df_clean.reset_index(drop=True)
+    return df_clean
+
+
+# ─────────────────────────────────────────────────────────────
+# 6. 연도별 현황 출력 (기존)
 # ─────────────────────────────────────────────────────────────
 def print_yearly_stats(df: pd.DataFrame):
     print("\n" + "=" * 65)
@@ -266,22 +373,27 @@ def print_yearly_stats(df: pd.DataFrame):
 # ─────────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(
-        description="Step 1: JSON → 재무비율 계산 + YoY 증가율"
+        description="Step 1: JSON → 재무비율 계산 + YoY 증가율 + 정합성 처리"
     )
     parser.add_argument(
         "--workers", type=int,
         default=max(1, os.cpu_count() - 1),
         help="병렬 프로세스 수 (기본: CPU 코어 수 - 1)"
     )
+    parser.add_argument(
+        "--no-listing-filter", action="store_true",
+        help="KRX 상장일 기반 필터링 skip (기본: 적용)"
+    )
     args = parser.parse_args()
 
     print("=" * 65)
     print("  Step 1: JSON → 재무비율 계산 (raw 폴더 전체)")
     print(f"  workers: {args.workers} / CPU: {os.cpu_count()}")
+    print(f"  상장일 필터: {'OFF' if args.no_listing_filter else 'ON'}")
     print("=" * 65)
 
-    # [1/3] JSON → 재무비율 (병렬)
-    print("\n[1/3] raw 데이터 병렬 변환 중...")
+    # [1/5] JSON → 재무비율 (병렬)
+    print("\n[1/5] raw 데이터 병렬 변환 중...")
     healthy  = process_folder(RAW_HEALTHY,  label=0, workers=args.workers)
     delisted = process_folder(RAW_DELISTED, label=1, workers=args.workers)
 
@@ -293,20 +405,32 @@ def main():
           f"(healthy {len(healthy):,} + delisted {len(delisted):,})")
     print(f"  기업 수: {combined['stock_code'].nunique():,}")
 
-    # [2/3] YoY 증가율 계산
-    print("\n[2/3] YoY 증가율 계산 중...")
+    # [2/5] 중복 키 dedup ← 신규
+    print("\n[2/5] (code, year, quarter) 중복 키 dedup...")
+    combined = _dedupe_by_key(combined)
+
+    # [3/5] YoY 증가율 계산
+    print("\n[3/5] YoY 증가율 계산 중...")
     combined = _add_yoy_growth_cols(combined)
     for col_name, _ in YOY_TARGETS:
         null_rate = combined[col_name].isna().mean()
         print(f"  {col_name} 결측률: {null_rate:.1%}")
 
+    # [4/5] 상장일 필터링 ← 신규
+    if not args.no_listing_filter:
+        print("\n[4/5] KRX 상장일 기반 비상장 기간 데이터 제거...")
+        combined = _filter_by_listing_date(combined, LISTED_XLSX)
+    else:
+        print("\n[4/5] 상장일 필터링 skip (--no-listing-filter)")
+
     # 저장
     out_path = OUT_DIR / "combined_raw.csv"
     combined.to_csv(out_path, index=False)
-    print(f"  저장 완료 → {out_path}")
+    print(f"\n  저장 완료 → {out_path}")
+    print(f"  최종: {len(combined):,}행, {combined['stock_code'].nunique():,}개 기업")
 
-    # [3/3] 연도별 현황 출력
-    print("\n[3/3] 연도별 현황 확인...")
+    # [5/5] 연도별 현황 출력
+    print("\n[5/5] 연도별 현황 확인...")
     print_yearly_stats(combined)
 
     print("\n" + "=" * 65)
