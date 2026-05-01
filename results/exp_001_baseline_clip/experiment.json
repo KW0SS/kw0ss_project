@@ -1,0 +1,31 @@
+{
+  "experiment_id": "exp_001",
+  "name": "baseline_clip",
+  "description": "전처리 baseline (clipping만 적용) + threshold 최적화",
+  "date": "2026-04-27",
+  "preprocessing": {
+    "pipeline": "ffill → CF=0 → sector·quarter median impute → IQR clipping",
+    "winsorize": false,
+    "robust_scale": false,
+    "high_missing_dropped": ["매출액증가율", "순이익증가율", "영업이익증가율"],
+    "impute_strategy": "median (SimpleImputer, fit on train)"
+  },
+  "features": {
+    "count": 33,
+    "include_macro": true,
+    "include_raw_value": true,
+    "gics_sector": "excluded (meta column)"
+  },
+  "imbalance_strategy": {
+    "method": "none + threshold optimization",
+    "note": "Phase 2에서 7전략 비교 → baseline이 PR-AUC 2~3배 우세"
+  },
+  "horizons": [10, 12],
+  "models": ["rf", "gbm", "xgb", "lgbm"],
+  "best_model": {
+    "name": "rf",
+    "horizon": 12,
+    "test_pr_auc": 0.2035,
+    "test_f1": 0.2500
+  }
+}
