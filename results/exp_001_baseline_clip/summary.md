@@ -43,12 +43,12 @@ tree-based 모델 4종의 baseline 성능을 확립하고 최적 전략을 결�
 
 **주요 설계 결정:**
 
-| 결정 사항 | 선택 | 근거 |
-|---|---|---|
-| 결측률 높은 컬럼 처리 | 매출액증가율, 순이익증가율, 영업이익증가율 **제외** | 3개 컬럼 결측률 ~66% (30,764행 중 ~20,000행 NaN). YoY 증가율은 전기 데이터 부재 시 계산 불가능한 구조적 결측 |
-| 잔여 결측 처리 | `SimpleImputer(strategy="median")` | train에서 fit → valid/test에 transform. impute 후 전 horizon NaN 0건 확인 완료 |
-| gics_sector | 피처에서 제외 (meta 컬럼) | 10개 범주형. LabelEncoding 시 순서 의미 부여 문제, OneHot 시 차원 증가 대비 효용 불명확. 후속 실험에서 재검토 대상 |
-| 매크로 변수 | 포함 (기본값) | `--no-macro` 옵션으로 제외 실험 가능 |
+| 결정 사항 | 선택 | 근거 | 관련 코드 |
+|---|---|---|---|
+| 결측률 높은 컬럼 처리 | 매출액증가율, 순이익증가율, 영업이익증가율 **제외** | 3개 컬럼 결측률 ~66% (30,764행 중 ~20,000행 NaN). YoY 증가율은 전기 데이터 부재 시 계산 불가능한 구조적 결측 | `src/modeling/data_loader.py`의 `HIGH_MISSING_COLUMNS`, `get_feature_columns()` |
+| 잔여 결측 처리 | `SimpleImputer(strategy="median")` | train에서 fit → valid/test에 transform. impute 후 전 horizon NaN 0건 확인 완료 | `src/modeling/data_loader.py`의 `prepare_xy()`, `load_and_prepare()` |
+| gics_sector | 피처에서 제외 (meta 컬럼) | 10개 범주형. LabelEncoding 시 순서 의미 부여 문제, OneHot 시 차원 증가 대비 효용 불명확. 후속 실험에서 재검토 대상 | `src/modeling/data_loader.py`의 `META_COLUMNS`, `get_feature_columns()` |
+| 매크로 변수 | 포함 (기본값) | `--no-macro` 옵션으로 제외 실험 가능 | `src/modeling/data_loader.py`의 `MACRO_COLUMNS`, `get_feature_columns()` / `src/modeling/run_all.py`의 `--no-macro` |
 
 **최종 피처: 33개**
 
@@ -84,12 +84,12 @@ H24: train=0, valid=0, test=0  [OK]
 
 **주요 설계 결정:**
 
-| 결정 사항 | 선택 | 근거 |
-|---|---|---|
-| Primary metric | **PR-AUC** (`average_precision_score`) | 158:1 불균형에서 ROC-AUC는 true negative가 압도적이라 과대평가 위험. PR-AUC는 positive class의 precision-recall 관계에 집중하여 실제 분류 능력을 더 정확히 반영 |
-| Secondary metrics | F1, Precision, Recall, ROC-AUC | 다각적 비교용 |
-| Threshold 최적화 | PR curve 기반 F1 최대화 threshold 탐색 | `precision_recall_curve`에서 F1 = 2PR/(P+R) 최대화 지점 |
-| 모델 선정 기준 | **valid set** PR-AUC | test set은 최종 보고용으로만 사용. data leakage 방지 |
+| 결정 사항 | 선택 | 근거 | 관련 코드 |
+|---|---|---|---|
+| Primary metric | **PR-AUC** (`average_precision_score`) | 158:1 불균형에서 ROC-AUC는 true negative가 압도적이라 과대평가 위험. PR-AUC는 positive class의 precision-recall 관계에 집중하여 실제 분류 능력을 더 정확히 반영 | `src/modeling/evaluate.py`의 `compute_metrics()` |
+| Secondary metrics | F1, Precision, Recall, ROC-AUC | 다각적 비교용 | `src/modeling/evaluate.py`의 `compute_metrics()` |
+| Threshold 최적화 | PR curve 기반 F1 최대화 threshold 탐색 | `precision_recall_curve`에서 F1 = 2PR/(P+R) 최대화 지점 | `src/modeling/evaluate.py`의 `find_best_threshold()` |
+| 모델 선정 기준 | **valid set** PR-AUC | test set은 최종 보고용으로만 사용. data leakage 방지 | `src/modeling/run_all.py`의 `run_single()` |
 
 **PR-AUC를 선택한 이유 (상세):**
 
@@ -100,6 +100,8 @@ ROC-AUC는 FPR = FP/(FP+TN)을 x축으로 사용하는데, TN이 30,000건 이�
 **모델 레지스트리 패턴:**
 
 각 모델 모듈은 동일한 인터페이스 `train(X_train, y_train, X_valid, y_valid) -> (model, params)`를 구현한다. `run_all.py`는 `importlib`로 동적 로드하여 모델 추가 시 레지스트리에 한 줄만 추가하면 된다.
+
+- 관련 코드: `src/modeling/run_all.py`의 `MODEL_REGISTRY`, `_load_train_fn()`, `run_single()`
 
 ```python
 MODEL_REGISTRY = {
