@@ -1,6 +1,11 @@
 .env
 .doppler.yaml
+.vscode/
+
+# Python
+.venv/
 __pycache__/
+
 *.pyc
 *.pyo
 *.pyd
@@ -13,9 +18,27 @@ data/input/companies_collected.csv
 data/input/pipeline_companies.csv
 data/input/companies_missing.csv
 data/input/companies_missing_legacy.csv
+# 작업 백업/로그
+preprocess/data/pre/
+preprocess/data/meta/
+preprocess/data/corpCode.xml
+preprocess/*.bak
+preprocess/data/processed/*.bak
 preprocess/data/raw
 preprocess/data/extra
 preprocess/data/excluded_structural
-preprocess/data/processed/
+preprocess/data/processed/combined_raw.csv
 logs/
 prs/context.json
+
+# 일회성 작업 도구 (커밋 결정 후 풀거나 유지)
+preprocess/data/scan_raw.py
+preprocess/data/raw_scan_report.md
+
+# 일회성 작업 도구
+preprocess/once/
+
+# docs는 핵심 보고서만 추적
+preprocess/docs/*
+!preprocess/docs/data_cleaning_report.md
+
