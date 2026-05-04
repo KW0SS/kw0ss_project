@@ -33,10 +33,23 @@ HIGH_MISSING_COLUMNS = {"매출액증가율", "순이익증가율", "영업이�
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "preprocess" / "data" / "processed"
+DEFAULT_VARIANT = "baseline"
 
 AVAILABLE_HORIZONS = sorted(
     [int(p.name[1:]) for p in DATA_DIR.iterdir() if p.is_dir() and p.name.startswith("H")],
 )
+
+
+def _resolve_horizon_dir(horizon: int, variant: str, data_dir: Path | str | None) -> Path:
+    """H{horizon}/{variant}/ 또는 (구조 호환) H{horizon}/ 경로를 반환."""
+    base = Path(data_dir) if data_dir else DATA_DIR
+    h_dir = base / f"H{horizon}"
+    variant_dir = h_dir / variant
+    if variant_dir.exists():
+        return variant_dir
+    if (h_dir / "train.csv").exists():
+        return h_dir
+    raise FileNotFoundError(f"Horizon 디렉터리 없음: {variant_dir} (또는 {h_dir})")
 
 
 # ---------------------------------------------------------------------------
@@ -47,17 +60,14 @@ AVAILABLE_HORIZONS = sorted(
 def load_horizon(
     horizon: int,
     data_dir: Path | str | None = None,
+    variant: str = DEFAULT_VARIANT,
 ) -> dict[str, pd.DataFrame]:
-    """H{horizon} 디렉터리에서 train/valid/test CSV를 로드한다.
+    """H{horizon}/{variant} 디렉터리에서 train/valid/test CSV를 로드한다.
 
     Returns:
         {"train": df_train, "valid": df_valid, "test": df_test}
     """
-    base = Path(data_dir) if data_dir else DATA_DIR
-    h_dir = base / f"H{horizon}"
-
-    if not h_dir.exists():
-        raise FileNotFoundError(f"Horizon 디렉터리 없음: {h_dir}")
+    h_dir = _resolve_horizon_dir(horizon, variant, data_dir)
 
     splits = {}
     for split_name in ("train", "valid", "test"):
@@ -73,11 +83,11 @@ def load_horizon(
 def load_meta(
     horizon: int,
     data_dir: Path | str | None = None,
+    variant: str = DEFAULT_VARIANT,
 ) -> dict:
-    """H{horizon}/meta.json을 로드한다."""
-    base = Path(data_dir) if data_dir else DATA_DIR
-    meta_path = base / f"H{horizon}" / "meta.json"
-    with open(meta_path, encoding="utf-8") as f:
+    """H{horizon}/{variant}/meta.json을 로드한다."""
+    h_dir = _resolve_horizon_dir(horizon, variant, data_dir)
+    with open(h_dir / "meta.json", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -157,8 +167,9 @@ def load_and_prepare(
     drop_high_missing: bool = True,
     impute_strategy: str = "median",
     data_dir: Path | str | None = None,
+    variant: str = DEFAULT_VARIANT,
 ) -> dict:
-    """H{horizon} 데이터를 로드하고 X/y 분리까지 수행한다.
+    """H{horizon}/{variant} 데이터를 로드하고 X/y 분리까지 수행한다.
 
     train으로 fit한 imputer를 valid/test에 동일 적용한다.
 
@@ -172,8 +183,8 @@ def load_and_prepare(
             "meta": dict,
         }
     """
-    splits = load_horizon(horizon, data_dir)
-    meta = load_meta(horizon, data_dir)
+    splits = load_horizon(horizon, data_dir, variant=variant)
+    meta = load_meta(horizon, data_dir, variant=variant)
 
     feature_cols = get_feature_columns(
         splits["train"],
