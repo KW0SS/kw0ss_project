@@ -104,8 +104,8 @@ def 총자본회전율(items: Items) -> float | None:
 
 
 def 유형자산회전율(items: Items) -> float | None:
-    """매출액 / 총자산 (이미지 기준: 매출액/총자산)."""
-    return _safe_div(_get(items, "revenue"), _get(items, "total_assets"))
+    """매출액 / 유형자산."""
+    return _safe_div(_get(items, "revenue"), _get(items, "tangible_assets"))
 
 
 def 매출원가율(items: Items) -> float | None:
