@@ -130,6 +130,8 @@ def plot_missing_heatmap(df: pd.DataFrame) -> None
 ```python
 def plot_histogram(df: pd.DataFrame, feature: str, bins: int = 50) -> None
 def plot_boxplot_by_label(df: pd.DataFrame, feature: str) -> None
+def plot_scatter_by_label(df: pd.DataFrame, x: str, y: str) -> None
+    # 두 수치형 피처의 관계를 label 색상으로 구분해 시각화
 def analyze_single_feature(df: pd.DataFrame, feature: str) -> dict
     # mean, median, std, min, max, IQR, skewness 등 요약 통계 반환
 def compare_group_stats_by_label(df: pd.DataFrame, feature: str) -> pd.DataFrame
@@ -206,6 +208,7 @@ seaborn>=0.12.0
     - 주요 비율 5~10개 선정
     - 각각 histogram + boxplot_by_label
     - analyze_single_feature()로 통계 요약
+    - 주요 피처 조합은 scatter_by_label로 label별 분리 가능성 확인
 
 [7] 상관관계
     - plot_correlation_heatmap()
