@@ -139,17 +139,16 @@ python3 -m src.modeling.run_all --exp exp_002_v3_baseline --variant baseline --h
 
 v3 데이터셋이 모델 성능을 명확히 개선함. RF baseline 전략 (Phase 2 결론)이 새 데이터셋에서도 유효함을 확인.
 
-### 다음 단계
+### 후속 실험
 
-1. **변형 비교 (exp-A/B/C)** — winsorize, robust_scale 효과 측정
-   ```bash
-   python3 -m src.modeling.run_all --exp exp_003_v3_winsor --variant exp-A --horizon 10
-   python3 -m src.modeling.run_all --exp exp_004_v3_robust --variant exp-B --horizon 10
-   python3 -m src.modeling.run_all --exp exp_005_v3_winsor_robust --variant exp-C --horizon 10
-   ```
-2. **전 horizon 확장** — `--horizon all` 로 H6~H24 sweep, sweet spot 재탐색
-3. **하이퍼파라미터 튜닝** — RF/XGB/LGBM Optuna 적용
-4. **Threshold 안정화** — valid positive 수가 적은 환경에서의 안정 threshold 전략 (예: bootstrap CI, 다중 horizon 평균)
+이 H10 baseline은 reference 지점이고, 이후 학습/비교는 다음 문서에서 진행됨.
+
+- **Variant 비교 (H10/H12 × baseline/exp-A/exp-B/exp-C)** — [`../exp_003_v3_variant_compare/summary_variant_compare.md`](../exp_003_v3_variant_compare/summary_variant_compare.md)
+- **Horizon sweep (baseline H10~H24)** — [`../exp_003_v3_variant_compare/summary_horizon_compare.md`](../exp_003_v3_variant_compare/summary_horizon_compare.md)
+
+추가 후속:
+- **하이퍼파라미터 튜닝** — RF/XGB/LGBM Optuna 적용
+- **Threshold 안정화** — valid positive 수가 적은 환경에서의 안정 threshold 전략 (bootstrap CI, 다중 horizon 평균 등)
 
 ---
 
