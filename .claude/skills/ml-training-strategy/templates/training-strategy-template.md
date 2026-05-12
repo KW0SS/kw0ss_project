@@ -1,133 +1,206 @@
-# ML Training Strategy
 
-## Executive Summary
+---
 
-- Current baseline:
-- Main objective:
-- Primary metric:
-- Operational constraint:
-- Recommended next run:
-- Main risk:
+# 2. `ml-training-strategy/templates/training-strategy-template.md`
 
-## 1. Current State
+```md
+# 모델 학습 전략
 
-- Baseline experiment:
-- Dataset version:
-- Prediction horizon:
-- Preprocessing:
-- Model families:
-- Best model:
-- Best metric:
-- Known limitation:
+## 1. 데이터 개요
 
-## 2. Decision Target
+### 1-1. 데이터셋 요약
 
-Choose the primary target for the next stage.
+- 데이터셋 이름:
+- 데이터 기간:
+- 예측 대상:
+- target/label 정의:
+- positive 기준:
+- negative 기준:
+- horizon:
+- window 사용 여부:
+- split 방식:
+- 주요 feature 그룹:
 
-- Improve ranking quality:
-- Improve recall:
-- Improve precision:
-- Improve early-warning lead time:
-- Improve threshold stability:
-- Improve interpretability:
+### 1-2. 전처리 의도 요약
 
-## 3. High-Priority Experiments
+- 전처리 목적:
+- EDA에서 확인된 주요 특징:
+- feature 구성 의도:
+- horizon/window 구성 의도:
 
-### 3.1 Horizon Sweep
+### 1-3. 학습 전 확인 필요 사항
 
-- Runs:
-- Controlled variables:
-- Changed variable:
-- Success criteria:
-- Expected output:
-- Stop/go rule:
+- label 생성 방식:
+- train/valid/test 분할 기준:
+- positive/negative 비율:
+- feature 사용 가능 시점:
+- 전처리 fit/apply 기준:
+- leakage 가능성:
 
-### 3.2 Hyperparameter Tuning
+---
 
-- Target models:
-- Search method:
-- Search space:
-- Validation metric:
-- Early stopping:
-- Success criteria:
-- Expected output:
+## 2. 학습 실험 후보
 
-### 3.3 Threshold Policy
+### Experiment 1. Baseline 모델 학습
 
-- Candidate policies:
-- Cost assumptions:
-- Recall target:
-- Precision target:
-- Success criteria:
-- Expected output:
+- 목적:
+- 사용 데이터:
+- 모델 후보:
+  - Logistic Regression
+  - Random Forest
+  - LightGBM
+  - XGBoost
+- 주요 평가 지표:
+  - PR-AUC
+  - ROC-AUC
+  - Precision
+  - Recall
+  - F1
+- 확인할 점:
 
-## 4. Medium-Priority Experiments
+### Experiment 2. Tabular 모델 비교
 
-### 4.1 Preprocessing Variants
+- 목적:
+- 사용 데이터:
+- 모델 후보:
+  - Logistic Regression
+  - Random Forest
+  - XGBoost
+  - LightGBM
+- 주요 평가 지표:
+  - PR-AUC
+  - Precision
+  - Recall
+  - F1
+  - ROC-AUC
+- 확인할 점:
 
-| Run Name | Clipping | Winsorization | Scaling | Notes |
-|---|---|---|---|---|
-| baseline | Yes | No | No | Existing setup |
-| exp_winsor | Yes | Yes | No | Outlier-control variant |
-| exp_robust | Yes | No | RobustScaler | Scale-robust variant |
-| exp_winsor_robust | Yes | Yes | RobustScaler | Combined variant |
+### Experiment 3. 전처리 버전 비교
 
-### 4.2 Feature Engineering
+- 목적:
+- 비교 대상:
+- 모델 후보:
+- 주요 평가 지표:
+- 확인할 점:
 
-- Ratio interactions:
-- Sector encoding:
-- Lag features:
-- Difference features:
-- Rolling features:
-- Leakage checks:
+### Experiment 4. Horizon별 비교
 
-### 4.3 Ensemble Strategy
+- 목적:
+- 비교 대상:
+  - H10
+  - H12
+  - H14
+  - H16
+- 모델 후보:
+- 주요 평가 지표:
+- 확인할 점:
 
-- Candidate models:
-- Blending method:
-- Stacking method:
-- Validation requirement:
-- Success criteria:
+### Experiment 5. Window Feature 기반 학습
 
-## 5. Low-Priority Experiments
+- 목적:
+- 사용 feature:
+- 모델 후보:
+- 주요 평가 지표:
+- 확인할 점:
 
-### 5.1 Model Interpretation
+### Experiment 6. Sequence Model 학습
 
-- SHAP global importance:
-- SHAP case studies:
-- False-positive review:
-- False-negative review:
+- 목적:
+- 입력 데이터:
+- 모델 후보:
+  - LSTM
+  - GRU
+  - Temporal CNN
+  - Transformer Encoder
+- 주요 평가 지표:
+- 확인할 점:
 
-### 5.2 Additional Model Families
+### Experiment 7. Class Imbalance 처리 방식 비교
 
-- CatBoost:
-- Logistic regression baseline:
-- Calibration model:
+- 목적:
+- 비교 방법:
+  - class_weight
+  - scale_pos_weight
+  - undersampling
+  - threshold tuning
+  - focal loss
+- 모델 후보:
+- 주요 평가 지표:
+- 확인할 점:
 
-## 6. Recommended Run Queue
+### Experiment 8. Threshold / High-risk Bucket 분석
 
-| Priority | Run Name | Purpose | Success Metric | Output |
-|---:|---|---|---|---|
-| 1 | Not available | Not available | Not available | Not available |
+- 목적:
+- 분석 방법:
+  - threshold별 Precision/Recall/F1
+  - Precision@K
+  - Recall@K
+  - Lift@K
+  - high-risk bucket별 positive rate
+- 확인할 점:
 
-## 7. Reporting Plan
+### Experiment 9. Sector / 기간별 성능 분석
 
-- Single experiment report location:
-- Comparison report location:
-- Required tables:
-- Required plots:
-- Required case studies:
+- 목적:
+- 분석 대상:
+- 주요 평가 지표:
+- 확인할 점:
 
-## 8. Risks and Controls
+### Experiment 10. Feature Ablation
 
-- Data leakage risk:
-- Class imbalance risk:
-- Threshold overfitting risk:
-- Horizon selection bias:
-- Sector distribution shift:
+- 목적:
+- 비교 방법:
+- 모델 후보:
+- 주요 평가 지표:
+- 확인할 점:
 
-## 9. Final Recommendation
+---
 
-- Next command or pipeline:
-- Expected decision after completion:
-- Criteria for advancing to deployment-style evaluation:
+## 3. 실험 우선순위
+
+### Priority 1. 먼저 수행할 실험
+
+- Baseline 모델 학습
+- Tabular 모델 비교
+- Class Imbalance 처리 방식 비교
+
+### Priority 2. 데이터 구조상 바로 가능한 실험
+
+- Horizon별 비교
+- 전처리 버전 비교
+- Threshold / High-risk Bucket 분석
+
+### Priority 3. 추가 데이터 정리가 필요한 실험
+
+- Window Feature 기반 학습
+- Sequence Model 학습
+- Sector / 기간별 성능 분석
+- Feature Ablation
+
+---
+
+## 4. 실험별 산출물
+
+| 실험 | 주요 산출물 |
+|---|---|
+| Baseline 모델 학습 | 기본 성능표, confusion matrix |
+| Tabular 모델 비교 | 모델별 성능 비교표 |
+| 전처리 버전 비교 | 전처리 버전별 성능 변화표 |
+| Horizon별 비교 | horizon별 성능 비교표 |
+| Window Feature 실험 | window feature 사용 전후 비교 |
+| Sequence Model 실험 | tabular baseline 대비 성능 비교 |
+| Threshold 분석 | threshold별 Precision/Recall/F1 |
+| High-risk Bucket 분석 | top-k bucket별 positive capture rate |
+| Sector / 기간별 분석 | sector/기간별 성능표 |
+| Feature Ablation | feature group별 성능 기여도 |
+
+---
+
+## 5. 주의사항
+
+- 상장폐지 예측은 positive 수가 적기 때문에 Accuracy 중심 평가는 적절하지 않다.
+- PR-AUC, Precision, Recall, F1을 중심으로 비교한다.
+- horizon별 비교 시 positive 수와 데이터 기간 차이를 확인한다.
+- window나 sequence 데이터를 만들 때 미래 정보가 포함되지 않도록 확인한다.
+- threshold는 valid set에서 정하고 test set에서는 고정해서 평가하는 것이 바람직하다.
+- LSTM 등 복잡한 모델은 tabular baseline을 만든 뒤 비교한다.
