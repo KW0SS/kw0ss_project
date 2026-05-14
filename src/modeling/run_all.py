@@ -147,6 +147,7 @@ def run_experiments(
     include_macro: bool = True,
     include_raw_value: bool = True,
     exp_dir: str | None = None,
+    variant: str = "baseline",
 ) -> list[dict]:
     """복수 모델 × 복수 horizon 실험을 실행한다.
 
@@ -171,6 +172,7 @@ def run_experiments(
             horizon,
             include_macro=include_macro,
             include_raw_value=include_raw_value,
+            variant=variant,
         )
         print_data_summary(horizon, data)
 
@@ -221,6 +223,11 @@ def main() -> None:
     )
     parser.add_argument("--no-macro", action="store_true", help="매크로 변수 제외")
     parser.add_argument("--no-raw-value", action="store_true", help="원시값 컬럼 제외")
+    parser.add_argument(
+        "--variant", type=str, default="baseline",
+        choices=["baseline", "exp-A", "exp-B", "exp-C"],
+        help="전처리 변형 선택 (processed/H{n}/{variant})",
+    )
 
     args = parser.parse_args()
 
@@ -237,6 +244,7 @@ def main() -> None:
         include_macro=not args.no_macro,
         include_raw_value=not args.no_raw_value,
         exp_dir=args.exp,
+        variant=args.variant,
     )
 
 
