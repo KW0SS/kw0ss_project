@@ -47,6 +47,7 @@ MODEL_REGISTRY: dict[str, str] = {
     "xgb": "src.modeling.train_xgboost",
     "lgbm": "src.modeling.train_lightgbm",
     "catboost": "src.modeling.train_catboost",
+    "logreg": "src.modeling.train_logreg",
 }
 
 
