@@ -1,0 +1,30 @@
+{
+  "model_name": "gbm",
+  "n_years": 2,
+  "variant": "exp-B",
+  "threshold": 0.006843531789428154,
+  "valid": {
+    "f1": 0.0955,
+    "precision": 0.0582,
+    "recall": 0.2667,
+    "roc_auc": 0.8096,
+    "pr_auc": 0.0583
+  },
+  "test": {
+    "f1": 0.0166,
+    "precision": 0.0087,
+    "recall": 0.1667,
+    "roc_auc": 0.6596,
+    "pr_auc": 0.0083
+  },
+  "test_valid": true,
+  "params": {
+    "n_estimators": 200,
+    "max_depth": 5,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "min_samples_leaf": 10,
+    "random_state": 42
+  },
+  "timestamp": "2026-05-15T22:00:15.048797"
+}
