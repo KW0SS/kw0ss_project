@@ -1,0 +1,38 @@
+{
+  "model_name": "xgb",
+  "n_years": 2,
+  "variant": "exp-B",
+  "threshold": 0.02712463214993477,
+  "valid": {
+    "f1": 0.2395,
+    "precision": 0.1869,
+    "recall": 0.3333,
+    "roc_auc": 0.8534,
+    "pr_auc": 0.1575
+  },
+  "test": {
+    "f1": 0.0198,
+    "precision": 0.0112,
+    "recall": 0.0833,
+    "roc_auc": 0.6383,
+    "pr_auc": 0.0097
+  },
+  "test_valid": true,
+  "params": {
+    "n_estimators": 300,
+    "max_depth": 6,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "min_child_weight": 5,
+    "scale_pos_weight": 1,
+    "eval_metric": "aucpr",
+    "early_stopping_rounds": 30,
+    "random_state": 42,
+    "n_jobs": 2,
+    "tree_method": "hist",
+    "verbosity": 0,
+    "best_iteration": 21
+  },
+  "timestamp": "2026-05-15T22:15:45.234400"
+}

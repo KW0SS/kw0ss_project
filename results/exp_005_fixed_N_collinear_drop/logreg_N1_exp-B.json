@@ -1,0 +1,31 @@
+{
+  "model_name": "logreg",
+  "n_years": 1,
+  "variant": "exp-B",
+  "threshold": 0.9723184352029905,
+  "valid": {
+    "f1": 0.1386,
+    "precision": 0.1129,
+    "recall": 0.1795,
+    "roc_auc": 0.8788,
+    "pr_auc": 0.06
+  },
+  "test": {
+    "f1": 0.2407,
+    "precision": 0.25,
+    "recall": 0.2321,
+    "roc_auc": 0.8807,
+    "pr_auc": 0.1866
+  },
+  "test_valid": true,
+  "params": {
+    "C": 1.0,
+    "penalty": "l2",
+    "solver": "lbfgs",
+    "class_weight": "balanced",
+    "max_iter": 2000,
+    "random_state": 42,
+    "n_jobs": 2
+  },
+  "timestamp": "2026-05-15T22:11:43.076103"
+}
