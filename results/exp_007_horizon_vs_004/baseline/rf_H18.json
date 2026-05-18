@@ -1,0 +1,29 @@
+{
+  "model_name": "rf",
+  "horizon": 18,
+  "threshold": 0.19163165045339295,
+  "valid": {
+    "f1": 0.3509,
+    "precision": 0.3333,
+    "recall": 0.3704,
+    "roc_auc": 0.913,
+    "pr_auc": 0.2859
+  },
+  "test": {
+    "f1": 0.3186,
+    "precision": 0.3462,
+    "recall": 0.2951,
+    "roc_auc": 0.8112,
+    "pr_auc": 0.2105
+  },
+  "params": {
+    "n_estimators": 200,
+    "max_depth": 10,
+    "min_samples_leaf": 5,
+    "max_features": "sqrt",
+    "random_state": 42,
+    "n_jobs": 2
+  },
+  "notes": "",
+  "timestamp": "2026-05-17T17:45:33.158963"
+}

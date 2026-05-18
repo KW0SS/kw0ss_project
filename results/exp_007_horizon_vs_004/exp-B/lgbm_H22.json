@@ -1,0 +1,35 @@
+{
+  "model_name": "lgbm",
+  "horizon": 22,
+  "threshold": 0.13214693018404736,
+  "valid": {
+    "f1": 0.3077,
+    "precision": 0.3448,
+    "recall": 0.2778,
+    "roc_auc": 0.9222,
+    "pr_auc": 0.2778
+  },
+  "test": {
+    "f1": 0.1667,
+    "precision": 0.3333,
+    "recall": 0.1111,
+    "roc_auc": 0.8658,
+    "pr_auc": 0.1525
+  },
+  "params": {
+    "n_estimators": 300,
+    "max_depth": 6,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "min_child_samples": 20,
+    "is_unbalance": false,
+    "metric": "average_precision",
+    "random_state": 42,
+    "n_jobs": 2,
+    "verbose": -1,
+    "best_iteration": 276
+  },
+  "notes": "",
+  "timestamp": "2026-05-17T17:56:36.684304"
+}
