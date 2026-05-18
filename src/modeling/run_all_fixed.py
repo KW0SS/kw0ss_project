@@ -33,8 +33,11 @@ from src.modeling.evaluate import (
     find_best_threshold,
 )
 from src.modeling.feature_engineering import (
+    FE_ALIASES,
     FE_MODES,
     RATIO_INCOMPATIBLE_VARIANTS,
+    canonical_fe_label,
+    normalize_fe_token,
 )
 
 MODEL_REGISTRY: dict[str, str] = {
@@ -213,9 +216,10 @@ def run_experiments(
         for variant in variants:
             for fe in fe_modes:
                 fe_label = fe or "none"
-                if fe == "ratio_total_assets" and variant in RATIO_INCOMPATIBLE_VARIANTS:
+                mode_set = set(fe.split("+")) if fe else set()
+                if "ratio_total_assets" in mode_set and variant in RATIO_INCOMPATIBLE_VARIANTS:
                     print(
-                        f"  [SKIP] fixed_N{n_years}/{variant}/fe={fe}: "
+                        f"  [SKIP] fixed_N{n_years}/{variant}/fe={fe_label}: "
                         f"robust_scale variant은 총자산 복원 불가"
                     )
                     continue
@@ -282,8 +286,10 @@ def main() -> None:
     parser.add_argument(
         "--fe", nargs="+", default=["none"],
         help=(
-            "피처 엔지니어링 모드 (선택지: none, "
-            f"{', '.join(FE_MODES)}). none=기존 다중공선성 제거 동작"
+            "피처 엔지니어링 모드/조합. 단일: none, "
+            f"{', '.join(FE_MODES)}. 조합은 `+`로 연결 "
+            f"(별칭 {FE_ALIASES} → 예: 'a+b', "
+            "'drop_collinear+signed_log1p'). none=기존 다중공선성 제거 동작"
         ),
     )
     parser.add_argument("--no-threshold-opt", action="store_true")
@@ -297,11 +303,15 @@ def main() -> None:
     else:
         n_years_list = [int(x) for x in args.n]
 
-    valid_fe = {"none", *FE_MODES}
+    fe_modes: list[str | None] = []
     for f in args.fe:
-        if f not in valid_fe:
-            parser.error(f"알 수 없는 --fe 값: {f!r} (선택지: {sorted(valid_fe)})")
-    fe_modes: list[str | None] = [None if f == "none" else f for f in args.fe]
+        if f == "none":
+            fe_modes.append(None)
+            continue
+        try:
+            fe_modes.append(canonical_fe_label(normalize_fe_token(f)))
+        except ValueError as e:
+            parser.error(f"알 수 없는 --fe 값: {f!r} ({e})")
 
     run_experiments(
         n_years_list=n_years_list,

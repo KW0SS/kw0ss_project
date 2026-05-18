@@ -87,13 +87,12 @@ def load_and_prepare_fixed(
     """fixed_N{n}/{variant} 데이터를 로드하고 X/y 분리 + impute 까지 수행.
 
     Args:
-        fe: 피처 엔지니어링 모드.
-            None                -> 기존 동작(다중공선성 2개 제거, exp_004/005 재현)
-            "drop_collinear"    -> 다중공선성 2개 제거
-            "ratio_total_assets"-> 절대값 5개를 총자산비율로 치환
-            "signed_log1p"      -> 모든 피처 sign(x)*log1p(|x|)
-            None/"drop_collinear" 외 모드에서는 다중공선성 제거를 중복
-            적용하지 않아 각 FE 실험이 서로 독립적으로 비교된다.
+        fe: 피처 엔지니어링 모드. None 이면 기존 동작(다중공선성 2개 제거,
+            exp_004/005 재현). 그 외에는 단일 모드명("signed_log1p") 또는
+            `+`로 묶은 조합 토큰("drop_collinear+ratio_total_assets",
+            별칭 "a+b" 등)을 받아 FE_ORDER 정규 순서로 적용한다.
+            FE가 지정되면 다중공선성 제거는 FE 파이프라인이 전담하므로
+            로더에서 중복 제거하지 않는다(각 실험이 독립 비교됨).
     """
     splits = load_fixed_n(n_years, data_dir, variant=variant)
     meta = load_meta(n_years, data_dir, variant=variant)
@@ -108,8 +107,7 @@ def load_and_prepare_fixed(
         drop_high_missing=drop_high_missing,
     )
 
-    apply_collinear_drop = fe is None or fe == "drop_collinear"
-    if apply_collinear_drop:
+    if fe is None:
         excluded_collinear = [c for c in feature_cols if c in COLLINEAR_DROP_COLUMNS]
         feature_cols = [c for c in feature_cols if c not in COLLINEAR_DROP_COLUMNS]
     else:

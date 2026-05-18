@@ -120,11 +120,66 @@ _DISPATCH = {
     "signed_log1p": apply_signed_log1p,
 }
 
+# 조합(combo) 정규 적용 순서.
+#   1) drop_collinear : 단순 컬럼 제거. 가장 먼저 적용해 후속 단계 입력을 줄인다.
+#   2) ratio_total_assets : 총자산 복원이 raw-scale 곱셈 항등식에 의존하므로
+#      값 변환(signed_log1p)보다 반드시 먼저 적용해야 한다.
+#   3) signed_log1p : 최종 피처 집합(비율 컬럼 포함)에 단조 변환을 적용.
+# 토큰 입력 순서와 무관하게 항상 이 순서로 강제한다.
+FE_ORDER = ("drop_collinear", "ratio_total_assets", "signed_log1p")
 
-def apply_feature_engineering(df: pd.DataFrame, fe_mode: str) -> pd.DataFrame:
-    """fe_mode에 해당하는 변환을 split DataFrame에 적용한다."""
-    if fe_mode not in _DISPATCH:
-        raise ValueError(
-            f"알 수 없는 fe_mode: {fe_mode!r} (지원: {sorted(_DISPATCH)})"
-        )
-    return _DISPATCH[fe_mode](df)
+# 단축 별칭 (사용자 표기 A/B/C 대응)
+FE_ALIASES = {
+    "a": "drop_collinear",
+    "b": "ratio_total_assets",
+    "c": "signed_log1p",
+}
+
+
+def normalize_fe_token(token: str) -> list[str]:
+    """`+` 로 묶인 FE 토큰을 정규 순서의 모드 리스트로 변환한다.
+
+    'a+b', 'drop_collinear+ratio_total_assets' 모두 허용.
+    중복 제거 후 FE_ORDER 순서로 정렬해 반환한다.
+    """
+    parts = [p.strip().lower() for p in token.split("+") if p.strip()]
+    modes: list[str] = []
+    for p in parts:
+        mode = FE_ALIASES.get(p, p)
+        if mode not in _DISPATCH:
+            raise ValueError(
+                f"알 수 없는 FE 모드: {p!r} "
+                f"(지원: {sorted(_DISPATCH)} 또는 별칭 {sorted(FE_ALIASES)})"
+            )
+        if mode not in modes:
+            modes.append(mode)
+    return [m for m in FE_ORDER if m in modes]
+
+
+def canonical_fe_label(modes: list[str]) -> str:
+    """정규 순서로 정렬된 모드 리스트를 `+` 라벨 문자열로."""
+    ordered = [m for m in FE_ORDER if m in modes]
+    return "+".join(ordered)
+
+
+def apply_feature_engineering(
+    df: pd.DataFrame, fe: str | list[str],
+) -> pd.DataFrame:
+    """단일 모드 또는 조합(combo)을 split DataFrame에 적용한다.
+
+    Args:
+        fe: 모드명/별칭, `+`로 묶은 조합 토큰, 또는 모드 리스트.
+            입력 순서와 무관하게 항상 FE_ORDER 순서로 적용된다.
+    """
+    if isinstance(fe, str):
+        modes = normalize_fe_token(fe)
+    else:
+        modes = [m for m in FE_ORDER if m in set(fe)]
+        unknown = set(fe) - set(_DISPATCH)
+        if unknown:
+            raise ValueError(f"알 수 없는 FE 모드: {sorted(unknown)}")
+    if not modes:
+        raise ValueError(f"적용할 FE 모드 없음: {fe!r}")
+    for mode in modes:
+        df = _DISPATCH[mode](df)
+    return df
