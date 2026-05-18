@@ -31,6 +31,14 @@ preprocess/data/processed/combined_raw.csv
 logs/
 prs/context.json
 
+# Experiment artifacts
+# Keep human-readable summaries in Git; keep per-run metrics/artifacts local or in external storage.
+results/**/*.json
+results/**/experiment.json
+results/**/feature_importance_*.csv
+notebooks/.ipynb_checkpoints/
+notebooks/2026-05-15_fixed_N_feature_eda.ipynb
+
 # 일회성 작업 도구 (커밋 결정 후 풀거나 유지)
 preprocess/data/scan_raw.py
 preprocess/data/raw_scan_report.md
@@ -41,4 +49,3 @@ preprocess/once/
 # docs는 핵심 보고서만 추적
 preprocess/docs/*
 !preprocess/docs/data_cleaning_report.md
-
