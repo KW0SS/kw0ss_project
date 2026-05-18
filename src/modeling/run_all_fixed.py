@@ -32,6 +32,10 @@ from src.modeling.evaluate import (
     evaluate_model,
     find_best_threshold,
 )
+from src.modeling.feature_engineering import (
+    FE_MODES,
+    RATIO_INCOMPATIBLE_VARIANTS,
+)
 
 MODEL_REGISTRY: dict[str, str] = {
     "rf": "src.modeling.train_rf",
@@ -53,6 +57,7 @@ def _save_result_fixed(
     model_name: str,
     n_years: int,
     variant: str,
+    fe: str | None,
     valid_metrics: dict,
     test_metrics: dict | None,
     params: dict,
@@ -62,7 +67,7 @@ def _save_result_fixed(
 ) -> Path:
     """fixed_N 실험 결과를 JSON 으로 저장한다.
 
-    파일명: {model}_N{n}_{variant}.json
+    파일명: {model}_N{n}_{variant}[_{fe}].json
     test_valid=False 이면 test 지표가 신뢰 불가(test_pos=0 등)임을 표시.
     """
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -70,6 +75,7 @@ def _save_result_fixed(
         "model_name": model_name,
         "n_years": n_years,
         "variant": variant,
+        "fe": fe,
         "threshold": threshold,
         "valid": valid_metrics,
         "test": test_metrics if test_valid else None,
@@ -77,7 +83,8 @@ def _save_result_fixed(
         "params": params,
         "timestamp": datetime.now().isoformat(),
     }
-    filename = f"{model_name}_N{n_years}_{variant}.json"
+    fe_suffix = f"_{fe}" if fe else ""
+    filename = f"{model_name}_N{n_years}_{variant}{fe_suffix}.json"
     filepath = results_dir / filename
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -89,13 +96,15 @@ def run_single(
     model_key: str,
     n_years: int,
     variant: str,
+    fe: str | None,
     data: dict,
     optimize_threshold: bool,
     results_dir: Path,
 ) -> dict:
     train_fn = _load_train_fn(MODEL_REGISTRY[model_key])
 
-    print(f"--- Training {model_key} on fixed_N{n_years} / {variant} ---")
+    fe_label = fe or "none"
+    print(f"--- Training {model_key} on fixed_N{n_years} / {variant} / fe={fe_label} ---")
     model, params = train_fn(
         data["X_train"], data["y_train"],
         data["X_valid"], data["y_valid"],
@@ -132,6 +141,7 @@ def run_single(
         model_name=model_key,
         n_years=n_years,
         variant=variant,
+        fe=fe,
         valid_metrics=valid_metrics,
         test_metrics=test_metrics,
         params=params,
@@ -146,6 +156,7 @@ def run_single(
         "model": model_key,
         "n_years": n_years,
         "variant": variant,
+        "fe": fe or "none",
         "threshold": threshold,
         "valid": valid_metrics,
         "test": test_metrics,
@@ -164,13 +175,16 @@ def print_comparison(results: list[dict], split: str = "test") -> None:
         reverse=True,
     )
     print(f"\n=== Model Comparison ({split} set, fixed_N) ===")
-    header = f"{'Model':<10} {'N':>2} {'Variant':<10} {'Thr':>6}"
+    header = f"{'Model':<10} {'N':>2} {'Variant':<10} {'FE':<20} {'Thr':>6}"
     header += "".join(f"{m:>11}" for m in METRIC_NAMES)
     print(header)
     print("-" * len(header))
     for r in rows:
         metrics = r[split] or {}
-        line = f"{r['model']:<10} {r['n_years']:>2} {r['variant']:<10} {r['threshold']:>6.3f}"
+        line = (
+            f"{r['model']:<10} {r['n_years']:>2} {r['variant']:<10} "
+            f"{r.get('fe', 'none'):<20} {r['threshold']:>6.3f}"
+        )
         for m in METRIC_NAMES:
             val = metrics.get(m)
             line += f"{val:>11.4f}" if val is not None else f"{'N/A':>11}"
@@ -183,6 +197,7 @@ def run_experiments(
     n_years_list: list[int],
     variants: list[str],
     model_keys: list[str],
+    fe_modes: list[str | None],
     optimize_threshold: bool,
     include_macro: bool,
     include_raw_value: bool,
@@ -196,40 +211,51 @@ def run_experiments(
 
     for n_years in n_years_list:
         for variant in variants:
-            print(f"\n{'='*64}")
-            print(f"  fixed_N{n_years} / {variant}")
-            print(f"{'='*64}\n")
-
-            try:
-                data = load_and_prepare_fixed(
-                    n_years,
-                    include_macro=include_macro,
-                    include_raw_value=include_raw_value,
-                    variant=variant,
-                )
-            except FileNotFoundError as e:
-                print(f"  [SKIP] {e}")
-                continue
-            print_data_summary_fixed(n_years, variant, data)
-
-            for key in model_keys:
-                if key not in MODEL_REGISTRY:
-                    print(f"  [SKIP] Unknown model: {key}")
-                    continue
-                try:
-                    result = run_single(
-                        model_key=key,
-                        n_years=n_years,
-                        variant=variant,
-                        data=data,
-                        optimize_threshold=optimize_threshold,
-                        results_dir=results_dir,
+            for fe in fe_modes:
+                fe_label = fe or "none"
+                if fe == "ratio_total_assets" and variant in RATIO_INCOMPATIBLE_VARIANTS:
+                    print(
+                        f"  [SKIP] fixed_N{n_years}/{variant}/fe={fe}: "
+                        f"robust_scale variant은 총자산 복원 불가"
                     )
-                    all_results.append(result)
-                except ImportError as e:
-                    print(f"  [SKIP] {key}: {e}")
-                except Exception as e:
-                    print(f"  [ERROR] {key}: {e}")
+                    continue
+
+                print(f"\n{'='*64}")
+                print(f"  fixed_N{n_years} / {variant} / fe={fe_label}")
+                print(f"{'='*64}\n")
+
+                try:
+                    data = load_and_prepare_fixed(
+                        n_years,
+                        include_macro=include_macro,
+                        include_raw_value=include_raw_value,
+                        variant=variant,
+                        fe=fe,
+                    )
+                except FileNotFoundError as e:
+                    print(f"  [SKIP] {e}")
+                    continue
+                print_data_summary_fixed(n_years, variant, data)
+
+                for key in model_keys:
+                    if key not in MODEL_REGISTRY:
+                        print(f"  [SKIP] Unknown model: {key}")
+                        continue
+                    try:
+                        result = run_single(
+                            model_key=key,
+                            n_years=n_years,
+                            variant=variant,
+                            fe=fe,
+                            data=data,
+                            optimize_threshold=optimize_threshold,
+                            results_dir=results_dir,
+                        )
+                        all_results.append(result)
+                    except ImportError as e:
+                        print(f"  [SKIP] {key}: {e}")
+                    except Exception as e:
+                        print(f"  [ERROR] {key}: {e}")
 
     if all_results:
         print_comparison(all_results, split="valid")
@@ -253,6 +279,13 @@ def main() -> None:
         "--models", nargs="+", default=list(MODEL_REGISTRY.keys()),
         help=f"모델 키 (선택지: {list(MODEL_REGISTRY.keys())})",
     )
+    parser.add_argument(
+        "--fe", nargs="+", default=["none"],
+        help=(
+            "피처 엔지니어링 모드 (선택지: none, "
+            f"{', '.join(FE_MODES)}). none=기존 다중공선성 제거 동작"
+        ),
+    )
     parser.add_argument("--no-threshold-opt", action="store_true")
     parser.add_argument("--no-macro", action="store_true")
     parser.add_argument("--no-raw-value", action="store_true")
@@ -264,10 +297,17 @@ def main() -> None:
     else:
         n_years_list = [int(x) for x in args.n]
 
+    valid_fe = {"none", *FE_MODES}
+    for f in args.fe:
+        if f not in valid_fe:
+            parser.error(f"알 수 없는 --fe 값: {f!r} (선택지: {sorted(valid_fe)})")
+    fe_modes: list[str | None] = [None if f == "none" else f for f in args.fe]
+
     run_experiments(
         n_years_list=n_years_list,
         variants=args.variant,
         model_keys=args.models,
+        fe_modes=fe_modes,
         optimize_threshold=not args.no_threshold_opt,
         include_macro=not args.no_macro,
         include_raw_value=not args.no_raw_value,
