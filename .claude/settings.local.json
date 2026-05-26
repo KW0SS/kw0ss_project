@@ -18,7 +18,9 @@
       "Bash(/Users/hann/Project/kwoss/kw0ss_project/.venv/bin/python -c ' *)",
       "Bash(.venv/bin/python preprocess/build_v4_replica.py --workers 8)",
       "Bash(.venv/bin/pip install *)",
-      "Bash(.venv/bin/python -m src.modeling.train_xgb_v4_replica --variant all)"
+      "Bash(.venv/bin/python -m src.modeling.train_xgb_v4_replica --variant all)",
+      "mcp__notion__API-post-search",
+      "mcp__notion__API-get-block-children"
     ],
     "deny": [
       "Read(./.env)",
