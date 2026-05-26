@@ -22,11 +22,14 @@ from src.modeling.data_loader import (
     get_feature_columns,
     prepare_xy,
 )
+from src.modeling.feature_engineering import (
+    COLLINEAR_DROP_COLUMNS,
+    apply_feature_engineering,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "preprocess" / "data" / "processed"
 DEFAULT_VARIANT = "baseline"
-COLLINEAR_DROP_COLUMNS = {"유동비율", "유형자산상각비"}
 
 AVAILABLE_N_YEARS = sorted(
     int(p.name[len("fixed_N"):])
@@ -79,10 +82,23 @@ def load_and_prepare_fixed(
     impute_strategy: str = "median",
     data_dir: Path | str | None = None,
     variant: str = DEFAULT_VARIANT,
+    fe: str | None = None,
 ) -> dict:
-    """fixed_N{n}/{variant} 데이터를 로드하고 X/y 분리 + impute 까지 수행."""
+    """fixed_N{n}/{variant} 데이터를 로드하고 X/y 분리 + impute 까지 수행.
+
+    Args:
+        fe: 피처 엔지니어링 모드. None 이면 기존 동작(다중공선성 2개 제거,
+            exp_004/005 재현). 그 외에는 단일 모드명("signed_log1p") 또는
+            `+`로 묶은 조합 토큰("drop_collinear+ratio_total_assets",
+            별칭 "a+b" 등)을 받아 FE_ORDER 정규 순서로 적용한다.
+            FE가 지정되면 다중공선성 제거는 FE 파이프라인이 전담하므로
+            로더에서 중복 제거하지 않는다(각 실험이 독립 비교됨).
+    """
     splits = load_fixed_n(n_years, data_dir, variant=variant)
     meta = load_meta(n_years, data_dir, variant=variant)
+
+    if fe is not None:
+        splits = {k: apply_feature_engineering(v, fe) for k, v in splits.items()}
 
     feature_cols = get_feature_columns(
         splits["train"],
@@ -90,8 +106,12 @@ def load_and_prepare_fixed(
         include_raw_value=include_raw_value,
         drop_high_missing=drop_high_missing,
     )
-    excluded_collinear = [c for c in feature_cols if c in COLLINEAR_DROP_COLUMNS]
-    feature_cols = [c for c in feature_cols if c not in COLLINEAR_DROP_COLUMNS]
+
+    if fe is None:
+        excluded_collinear = [c for c in feature_cols if c in COLLINEAR_DROP_COLUMNS]
+        feature_cols = [c for c in feature_cols if c not in COLLINEAR_DROP_COLUMNS]
+    else:
+        excluded_collinear = []
 
     X_train, y_train, imputer = prepare_xy(splits["train"], feature_cols, impute_strategy)
     X_valid, y_valid, _ = prepare_xy(splits["valid"], feature_cols, imputer=imputer)
@@ -103,6 +123,7 @@ def load_and_prepare_fixed(
         "X_test": X_test, "y_test": y_test,
         "feature_cols": feature_cols,
         "excluded_collinear": excluded_collinear,
+        "fe": fe,
         "imputer": imputer,
         "meta": meta,
     }
@@ -111,6 +132,7 @@ def load_and_prepare_fixed(
 def print_data_summary_fixed(n_years: int, variant: str, data: dict) -> None:
     meta = data["meta"]
     print(f"=== fixed_N{n_years} / {variant} Dataset Summary ===")
+    print(f"  FE mode: {data.get('fe') or 'none (legacy collinear drop)'}")
     print(f"  Features: {len(data['feature_cols'])}개")
     print(f"  Excluded collinear: {data.get('excluded_collinear', [])}")
     print(f"  Train: {len(data['X_train']):,}행  (pos={int(data['y_train'].sum())})")
