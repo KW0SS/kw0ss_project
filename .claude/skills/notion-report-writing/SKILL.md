@@ -27,7 +27,8 @@ If `summary.md` is not specified, find the most relevant `summary.md` from the u
 1. Find the Notion page named `보고서`.
 2. Inside it, find `보고서 데이터베이스`.
 3. Create the report in `보고서 데이터베이스`.
-4. Prefer existing report formatting from entries whose `사람` property is `이정한` when available.
+4. When referencing existing report formatting, use only entries whose `사람` property is `이정한`.
+5. Do not use pages with any other `사람` value as formatting or content references.
 
 ## Fixed Properties
 
@@ -74,7 +75,7 @@ Always create or identify the parent item first, then place child report items u
 1. Read the specified `summary.md` and any nearby JSON/CSV metrics referenced by it if needed for exact values.
 2. Search Notion for `보고서`, fetch it, and identify `보고서 데이터베이스`.
 3. Fetch the database schema before creating pages.
-4. Query or search for sample entries where `사람 = 이정한`; use their section layout, title style, and level of detail as the formatting reference.
+4. Query or search for sample entries where `사람 = 이정한`; use only those pages' section layout, title style, and level of detail as the formatting reference.
 5. Create or identify the parent item first.
 6. Create the child result report in the database with fixed properties and inferred `타입`.
 7. Keep the Notion body factual:
